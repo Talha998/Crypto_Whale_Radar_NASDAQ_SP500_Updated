@@ -1,0 +1,51 @@
+.iex-panel{padding:24px;margin:20px 0 24px;border:1px solid #223e5a;border-radius:17px;background:#081728;color:#e8f2ff}
+.iex-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:16px}
+.iex-head h2{font-size:25px;margin:4px 0 9px;color:#f1f6ff}.iex-head p{max-width:820px;color:#98b1cc;font-size:13px;line-height:1.6;margin:0}
+.iex-head strong{color:#e8f2ff}.iex-badges{display:grid;gap:9px;justify-items:end;text-align:right;min-width:240px}
+.iex-badges small{font-size:11px;color:#8ca7c4}.iex-live-pill{font-size:11px;letter-spacing:.07em;font-weight:900;border:1px solid #5a4951;border-radius:18px;padding:8px 12px;color:#efb4bc}
+.iex-live-pill.live{color:#56e8a9;border-color:#255947;background:#10261e}
+.iex-warning{border:1px solid #70552f;background:#291f16;color:#e0c99f;padding:13px 15px;font-size:12px;line-height:1.65;border-radius:11px;margin-bottom:20px}
+.iex-warning strong{color:#ffe2ac}.iex-warning b{color:#fff1d8}
+.iex-setup{background:#112b44;border:1px solid #466f9b;border-radius:13px;padding:18px;margin-bottom:18px;font-size:13px;color:#aec3db;line-height:1.7}
+.iex-setup strong{display:block;color:#eff6ff;font-size:16px}.iex-setup code{color:#ffd88c;word-break:break-all}.iex-setup a{color:#91c6ff;text-decoration:underline}
+.iex-feed-error{padding:11px 15px;background:#2b1520;color:#ffa6b4;border-radius:9px;margin-bottom:16px;font-size:12px}
+.iex-ticker-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:24px}
+.iex-ticker{min-width:0;background:#0a1d30;border:1px solid #29445f;padding:18px;border-radius:14px}
+.iex-ticker-top{display:flex;justify-content:space-between;gap:10px;align-items:start}.iex-ticker-top h3{font-size:20px;margin:8px 0 12px}
+.iex-mini-label{border:1px solid #325473;border-radius:19px;font-size:10px;padding:6px 10px;color:#8dbcea;white-space:nowrap}
+.iex-two-numbers{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.iex-two-numbers>div{display:grid;gap:6px;min-width:0;background:#071728;border-radius:11px;border:1px solid #233d56;padding:12px}
+.iex-two-numbers small{font-size:11px;color:#9bb3d0}.iex-two-numbers strong{font-size:25px;overflow-wrap:anywhere}.iex-two-numbers span{font-size:11px;color:#83a0bf}
+.iex-ticker-stat{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid #203a55;font-size:12px}
+.iex-ticker-stat span{color:#8ea8c2}.iex-ticker-stat strong{text-align:right;overflow-wrap:anywhere}
+.iex-section-bar{display:flex;gap:18px;justify-content:space-between;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap}.iex-section-bar h3{font-size:20px;margin:6px 0 0}
+.iex-filters{display:flex;gap:8px;flex-wrap:wrap}.iex-filters button{border:1px solid #294c6b;background:#0c2034;color:#9ebbd6;border-radius:9px;padding:9px 13px;font-weight:800;font-size:11px;cursor:pointer}
+.iex-filters button.selected{background:#19436b;border-color:#5f9ad1;color:#fff}
+.iex-event-grid .feed-card,.iex-event-grid .impact-card{min-width:0}.iex-event-feed{max-height:640px;min-height:175px;overflow:auto}
+.iex-trade-row{grid-template-columns:minmax(125px,1.1fr) minmax(120px,.9fr) minmax(150px,1.1fr) minmax(130px,1fr) minmax(105px,.8fr) minmax(90px,.7fr);gap:10px}
+.iex-trade-row .coin{font-size:16px}.iex-trade-row small{line-height:1.5}.iex-trade-row .pill{white-space:normal;text-align:center}
+.iex-detail .impact-grid .info strong{font-size:15px}.iex-detail-note{font-size:12px;line-height:1.6;padding:12px;border-radius:10px;border:1px solid #70552f;color:#eccb9a;background:#2b211c;margin-bottom:16px}
+.iex-footer{font-size:11px;color:#7897b8;line-height:1.7;margin:18px 0 0}.iex-footer code{color:#bad9fa}
+@media(max-width:1400px){.iex-event-grid{grid-template-columns:1fr}.iex-trade-row{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:800px){.iex-panel{padding:16px}.iex-head{flex-direction:column}.iex-badges{justify-items:start;text-align:left}.iex-ticker-cards{grid-template-columns:1fr}.iex-trade-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:430px){.iex-trade-row{grid-template-columns:1fr}.iex-detail .impact-grid{grid-template-columns:1fr}}
+
+/* $5M minimum is applied to emitted signals; keep the distinction visible. */
+.iex-minimum-note {
+  margin: 12px 0 18px;
+  padding: 11px 15px;
+  border: 1px solid rgba(84, 232, 162, 0.28);
+  border-radius: 10px;
+  background: rgba(12, 34, 40, 0.72);
+  color: #a8bdd2;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.iex-minimum-note strong { color: #54e8a2; }
+
+/* Diagnostic status is distinct from both the $5M signal list and connection badge. */
+.iex-feed-health { margin: 14px 0; padding: 14px 18px; border-radius: 13px; border: 1px solid #315174; background: #0b2032; color: #b6cee7; }
+.iex-feed-health strong { color: #e3f1ff; }
+.iex-feed-health p { margin: 6px 0 9px; line-height: 1.55; }
+.iex-health-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 12px; margin-bottom: 8px; }
+.iex-feed-health small { display: block; color: #90a7c0; line-height: 1.5; }
