@@ -1,3 +1,6 @@
+import MarketNewsPanel from './news/MarketNewsPanel.jsx';
+import {NetflowAlarmGate} from './netflow/netflowAlarm.js';
+import SpotNetflowPanel from './netflow/SpotNetflowPanel.jsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
@@ -185,6 +188,7 @@ function App() {
   const latestPriceRef = useRef(new Map());
   const signalAlarmEnabledRef = useRef(false);
   const audioContextRef = useRef(null);
+  const netflowAlarmGateRef = useRef(new NetflowAlarmGate());
   const thresholdRef = useRef(DEFAULT_THRESHOLD);
   const windowSecRef = useRef(DEFAULT_WINDOW);
   const rollingRef = useRef(new Map());
@@ -307,7 +311,8 @@ function App() {
 
       setSignalAlarmEnabled(true);
       signalAlarmEnabledRef.current = true;
-      setAlarmMessage('Signal alarm armed');
+      netflowAlarmGateRef.current.arm(Date.now());
+      setAlarmMessage('Signal alarm armed · includes 1-minute ±$5M netflow');
       playAlarmTone(audioContextRef.current, 'BUY');
     } catch (err) {
       setAlarmMessage(err?.message || 'Unable to enable signal alarm');
@@ -354,7 +359,30 @@ function App() {
     }
   };
 
+  const alertSpotNetflow = async (signal) => {
+    if (!signalAlarmEnabledRef.current || !netflowAlarmGateRef.current.accept(signal)) return;
+    const label = `${signal.symbol} · 1m NET ${signal.side === 'BUY' ? 'BUYING' : 'SELLING'} · ${compactUsd(signal.net)}`;
+    try {
+      const ctx = audioContextRef.current;
+      if (!ctx) throw new Error('Click Enable alarm to allow browser sound');
+      if (ctx.state === 'suspended') await ctx.resume();
+      if (ctx.state !== 'running') throw new Error('Sound paused by browser; click Enable or Test sound');
+      if (!signalAlarmEnabledRef.current) return;
+      playAlarmTone(ctx, signal.side);
+      setAlarmMessage(`Alarm played: ${label} · ${formatPakistanDateTime(signal.time)}`);
+    } catch (err) { setAlarmMessage(err?.message || 'Sound unavailable; visual alarm shown'); }
+    if ('Notification' in window && Notification.permission === 'granted' && signalAlarmEnabledRef.current) {
+      try {
+        new Notification(label, {
+          body: `Price ${money(signal.price, priceDigits(signal.price))} USDT · ${formatPakistanDateTime(signal.time)} · Rolling 60-second netflow`,
+          tag: `spot-netflow-${signal.id}`,
+        });
+      } catch { /* Visual alarm remains available. */ }
+    }
+  };
+
   const disableSignalAlarm = () => {
+    netflowAlarmGateRef.current.disable();
     setSignalAlarmEnabled(false);
     signalAlarmEnabledRef.current = false;
     setAlarmMessage('Signal alarm is off');
@@ -631,6 +659,8 @@ function App() {
 
   return (
     <main className="shell">
+      <SpotNetflowPanel alarmEnabled={signalAlarmEnabled} alarmMessage={alarmMessage} onEnableAlarm={enableSignalAlarm} onDisableAlarm={disableSignalAlarm} onTestAlarm={testSignalAlarm} onNetflowAlarm={alertSpotNetflow} />
+      <MarketNewsPanel />
       <header className="hero">
         <div>
           <div className="eyebrow">REAL-TIME MULTI-COIN WHALE PRESSURE</div>

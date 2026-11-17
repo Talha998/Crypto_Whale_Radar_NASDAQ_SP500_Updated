@@ -1,3 +1,23 @@
+## New: Market News & Possible Crypto Impact
+
+One panel combines Nvidia/tech, macro/Fed and crypto headlines with source links, Pakistan publication/first-seen times, possible bullish/bearish context and source health. Free public feeds refresh every 2 minutes. No API key is required. See [MARKET_NEWS_GUIDE.md](MARKET_NEWS_GUIDE.md).
+
+## New: persistent netflow logs
+
+Every observed 1-minute ±$5M event now saves date, Pakistan time, coin, direction, netflow and price to `logs/spot-netflow.jsonl`. View **Saved $5M+ netflow log** or use **Download full CSV**. Restart the Node server for the new endpoints.
+
+## New: 1-minute ±$5M sound alarm
+
+Click **Enable alarm** in the top netflow panel once, then use **Test sound**. New positive and negative $5M netflow events play distinct tones and show a dated screen alert. Full setup: [SPOT_NETFLOW_SETUP.md](SPOT_NETFLOW_SETUP.md).
+
+## Live 1-minute netflow and prices
+
+The top panel now defaults to live rolling 60-second netflow, live trade prices, and $5M+ events with date and Pakistan time. See [SPOT_NETFLOW_SETUP.md](SPOT_NETFLOW_SETUP.md) for startup and installation.
+
+## New: Live Spot Netflow
+
+See [SPOT_NETFLOW_SETUP.md](SPOT_NETFLOW_SETUP.md) for the new top panel, free Binance data, optional CoinGlass mode, and setup.
+
 > **Latest change:** NASDAQ-100 / S&P 500 IEX quote-classified trade signals now require **minimum $5,000,000 per BUY/SELL side within 60 seconds**. No smaller IEX trade-pressure events or alarms are produced. See [CHANGELOG_5M_MINIMUM.md](CHANGELOG_5M_MINIMUM.md).
 
 # Crypto Whale Radar — Rolling Pressure Edition
