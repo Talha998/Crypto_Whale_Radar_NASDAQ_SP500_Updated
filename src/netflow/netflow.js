@@ -1,4 +1,4 @@
-export const COINS = ['BTC', 'ETH', 'BNB', 'USDC', 'XRP'];
+export const COINS = ['BTC', 'ETH', 'BNB', 'USDC', 'XRP', 'SOL'];
 export const WINDOWS = [['5m','5 minute',5],['15m','15 minute',15],['30m','30 minute',30],['1h','1 hour',60],['2h','2 hour',120],['4h','4 hour',240],['6h','6 hour',360],['8h','8 hour',480],['12h','12 hour',720],['24h','24 hour',1440],['7d','1 week',10080],['15d','15 day',21600],['30d','30 day',43200]];
 export function finite(value) { return value === null || value === undefined || value === '' ? null : Number.isFinite(Number(value)) ? Number(value) : null; }
 export function candleFlow(candles, minutes, now) {

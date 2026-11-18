@@ -1,6 +1,8 @@
+import {thresholdFor} from './src/netflow/coinThresholds.js';
 import {createNetflowLog,attachNetflowLog} from './netflow-log-server.mjs';
 import {COINS} from './src/netflow/netflow.js';
-const LIMIT=1000, MAX_PAGES=30, THRESHOLD=5000000;
+import {isCurrentDailyMover} from './daily-movers-server.mjs';
+const LIMIT=1000, MAX_PAGES=30;
 
 // Exact trade-based rolling minute. Used when the browser's WebSocket is blocked.
 export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=async()=>{}}={}) {
@@ -56,7 +58,7 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
     if(price!==null&&(!Number.isFinite(price)||price<=0||!Number.isFinite(lastTrade)))throw Error('Invalid price response');
     return {symbol,net:buy-sell,buy,sell,price,lastTrade,ready:true,remaining:0,asOf:end,tradeCount:trades.length};
   }
-  async function refresh() {
+  async function refresh(symbols) {
     deadline=Date.now()+25000;
     const started=clock();
     if(offsetAt===null || started-offsetAt>60000) {
@@ -66,37 +68,40 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
       offset=time.serverTime-clock();offsetAt=clock();
     }
     const end=clock()+offset;
-    const results=await Promise.allSettled(COINS.map(symbol=>oneCoin(symbol,end)));
+    const results=await Promise.allSettled(symbols.map(symbol=>oneCoin(symbol,end)));
     const observedAt=clock(),ageMs=Math.max(0,observedAt-(end-offset));
     const toLog=[];
     const rows=results.map((r,i)=>{
-      const symbol=COINS[i];
+      const symbol=symbols[i];
       if(r.status!=='fulfilled'||ageMs>15000) {
         const old=cached?.rows.find(x=>x.symbol===symbol);
         return {...(old||{symbol,net:null,price:null,lastTrade:null,ready:false,remaining:60}),stale:true,error:'Live trade API unavailable or incomplete'};
       }
       const row=r.value;
       const old=states.get(symbol)||{regime:0,cooldown:{}};
-      const direction=row.net>=THRESHOLD?1:row.net<=-THRESHOLD?-1:0;
+      const thresholdUSDT=thresholdFor(symbol);
+      const direction=row.net>=thresholdUSDT?1:row.net<=-thresholdUSDT?-1:0;
       if(direction&&direction!==old.regime&&observedAt-(old.cooldown[direction]??-Infinity)>=60000) {
         old.cooldown[direction]=observedAt;
-        events.unshift({id:`rest-${symbol}-${observedAt}-${direction}`,symbol,side:direction>0?'BUY':'SELL',net:row.net,buy:row.buy,sell:row.sell,price:row.price,time:observedAt,tradeTime:row.lastTrade,windowSeconds:60,source:'Binance Spot USDT · REST 3s'});
+        events.unshift({id:`rest-${symbol}-${observedAt}-${direction}`,symbol,side:direction>0?'BUY':'SELL',net:row.net,buy:row.buy,sell:row.sell,price:row.price,time:observedAt,tradeTime:row.lastTrade,thresholdUSDT,windowSeconds:60,source:'Binance Spot USDT · REST 3s'});
         toLog.push(events[0]);
         if(events.length>100)events.length=100;
       }
       old.regime=direction;states.set(symbol,old);
-      return {...row,stale:false};
+      return {...row,thresholdUSDT,stale:false};
     });
     const saved=await Promise.allSettled(toLog.map(event=>onEvent(event)));
     const logError=saved.some(r=>r.status==='rejected')?'Could not save a netflow log entry':'';
     return {rows,events:[...events],logError,fetchedAt:observedAt,ageMs,asOf:end,stale:rows.every(r=>r.stale),source:'Binance Spot · REST fallback · 3s'};
   }
-  return async()=>{
-    if(cached&&clock()-lastAttempt<3000)return cached;
+  return async(requestedSymbols=COINS)=>{
+    const symbols=[...new Set(requestedSymbols)].filter(symbol=>COINS.includes(symbol)||isCurrentDailyMover(symbol)).slice(0,16);
+    if(!symbols.length) return {rows:[],events:[],fetchedAt:clock(),stale:true,error:'No supported symbols requested'};
+    if(cached&&cached.symbols?.join(',')===symbols.join(',')&&clock()-lastAttempt<3000)return cached;
     if(pending)return pending;
     lastAttempt=clock();
-    pending=refresh().then(data=>cached=data).catch(()=>{
-      cached={rows:COINS.map(symbol=>({...cached?.rows.find(r=>r.symbol===symbol),symbol,stale:true})),events:[...events],fetchedAt:cached?.fetchedAt??null,stale:true,source:'Binance Spot · REST fallback · 3s',error:'Live REST API unavailable. Check server internet access and Binance restrictions.'};return cached;
+    pending=refresh(symbols).then(data=>cached={...data,symbols}).catch(()=>{
+      cached={rows:symbols.map(symbol=>({...cached?.rows.find(r=>r.symbol===symbol),symbol,stale:true})),events:[...events],fetchedAt:cached?.fetchedAt??null,stale:true,source:'Binance Spot · REST fallback · 3s',error:'Live REST API unavailable. Check server internet access and Binance restrictions.',symbols};return cached;
     }).finally(()=>{pending=null;});
     return pending;
   };
@@ -109,7 +114,8 @@ export function liveRestPlugin() {
     server.middlewares.use('/api/spot-live-minute',async(req,res)=>{
       res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
       if(req.method!=='GET'){res.statusCode=405;res.end(JSON.stringify({error:'Method not allowed'}));return;}
-      res.end(JSON.stringify(await service()));
+      const requested=String(new URL(req.url,'http://localhost').searchParams.get('symbols')||'').split(',').filter(Boolean);
+      res.end(JSON.stringify(await service(requested.length?requested:COINS)));
     });
   }
   return {name:'spot-live-rest-fallback',configureServer:attach,configurePreviewServer:attach};

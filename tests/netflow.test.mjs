@@ -17,13 +17,13 @@ test('gaps, malformed values and duplicate timestamps cannot invent complete his
 });
 test('CoinGlass maps only requested coins and never turns missing into zero',()=>{
  const rows=normalizeCoinGlass([{symbol:'BTC',net_flow_usd_5m:5000000,net_flow_usd_7d:-12,market_cap:null},{symbol:'DOGE'}]);
- assert.equal(rows.length,5);assert.equal(rows[0].values['5m'],5000000);assert.equal(rows[0].values['7d'],-12);
+ assert.equal(rows.length,6);assert.equal(rows[0].values['5m'],5000000);assert.equal(rows[0].values['7d'],-12);
  assert.equal(rows[1].values['5m'],null);assert.equal(rows[0].marketCap,null);
  assert.equal(usd(5000000),'+$5.00M');assert.equal(usd(-5000000),'-$5.00M');assert.equal(usd(null),'—');
 });
 test('server caches, deduplicates requests, marks refresh failure stale and keeps key private',async()=>{
  let now=100000, calls=0, fail=false;
- const service=createNetflowService({key:'private-test-key',clock:()=>now,fetcher:async()=>{calls++;if(fail)throw Error('private-test-key');return {ok:true,json:async()=>({code:'0',data:['BTC','ETH','BNB','USDC','XRP'].map(symbol=>({symbol,net_flow_usd_5m:5e6}))})};}});
+ const service=createNetflowService({key:'private-test-key',clock:()=>now,fetcher:async()=>{calls++;if(fail)throw Error('private-test-key');return {ok:true,json:async()=>({code:'0',data:['BTC','ETH','BNB','USDC','XRP','SOL'].map(symbol=>({symbol,net_flow_usd_5m:5e6}))})};}});
  const [a,b]=await Promise.all([service(),service()]);assert.equal(calls,1);assert.deepEqual(a,b);
  await service();assert.equal(calls,1);now+=31000;fail=true;
  const stale=await service();assert.equal(stale.stale,true);assert.equal(stale.fetchedAt,100000);assert.ok(!JSON.stringify(stale).includes('private-test-key'));
@@ -35,7 +35,7 @@ test('free feed calculates all coins and long windows from real candle schema',a
    const hour=url.includes('interval=1h');const step=hour?3600000:60000, end=Math.floor(now/step)*step;
    return Array.from({length:hour?721:1000},(_,i)=>bar(end-i*step)).reverse();
  }})});
- const result=await service();assert.equal(result.stale,false);assert.equal(result.rows.length,5);assert.equal(result.rows[0].values['5m'],250);assert.ok(Number.isFinite(result.rows[0].values['30d']));
+ const result=await service();assert.equal(result.stale,false);assert.equal(result.rows.length,6);assert.equal(result.rows[0].values['5m'],250);assert.ok(Number.isFinite(result.rows[0].values['30d']));
  assert.equal(result.rows[0].marketCap,1e12);assert.equal(result.rows[1].marketCap,null);
 });
 test('long windows use the provider minute boundary when the local machine clock differs',async()=>{

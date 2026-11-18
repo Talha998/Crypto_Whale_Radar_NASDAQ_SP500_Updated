@@ -1,5 +1,5 @@
 export const NEWS_CATEGORIES=['Tech / Nvidia','Fed / Macro','ETF / Institutions','Regulation','Exchange / Security','Stablecoins','Geopolitics','Coin updates','General markets'];
-const COIN_PATTERNS=[['BTC',/\b(bitcoin|btc)\b/i],['ETH',/\b(ethereum|ether|eth)\b/i],['BNB',/\b(bnb|binance coin)\b/i],['XRP',/\b(xrp|ripple)\b/i],['USDC',/\b(usdc|circle)\b/i]];
+const COIN_PATTERNS=[['BTC',/\b(bitcoin|btc)\b/i],['ETH',/\b(ethereum|ether|eth)\b/i],['BNB',/\b(bnb|binance coin)\b/i],['XRP',/\b(xrp|ripple)\b/i],['USDC',/\b(usdc|circle)\b/i],['SOL',/\b(solana|sol)\b/i],['Gold',/\b(gold|bullion|xau)\b/i],['Silver',/\b(silver|xag)\b/i],['SPY / S&P 500',/\b(spy|s&p 500|s&p)\b/i]];
 export function newsImpact(title){
  const t=String(title).toLowerCase();
  const coins=COIN_PATTERNS.filter(([,re])=>re.test(t)).map(([coin])=>coin);
@@ -12,6 +12,8 @@ export function newsImpact(title){
  const add=(direction,match,reason)=>{if(match)(direction==='up'?up:down).push(reason);};
  add('down',/\b(equity markets|stock markets|us stocks|wall street|s&p 500)\b.{0,45}\b(drop\w*|fall\w*|slump\w*|plung\w*|sell-off|selloff)\b/.test(t),'Equity weakness risk-off context ho sakti hai; crypto par indirect pressure possible hai, causal proof nahin.');
  add('up',/\b(equity markets|stock markets|us stocks|wall street|s&p 500)\b.{0,45}\b(rall\w*|surge\w*|gain\w*)\b/.test(t),'Equity strength risk appetite ko support kar sakti hai; crypto ko apne price/netflow se confirm karein.');
+ add('down',/\b(gold|silver|spy|s&p 500)\b.{0,50}\b(drop\w*|fall\w*|slump\w*|plung\w*|sell-off|selloff|declin\w*)\b/.test(t),'Yeh headline tracked gold, silver ya S&P 500 proxy mein weakness report karti hai; price move pehle ho sakta hai.');
+ add('up',/\b(gold|silver|spy|s&p 500)\b.{0,50}\b(rall\w*|surge\w*|gain\w*|rise\w*|jump\w*)\b/.test(t),'Yeh headline tracked gold, silver ya S&P 500 proxy mein strength report karti hai; price move pehle ho sakta hai.');
  add('down',/\b(nvidia|nvda|nasdaq|tech stocks|ai stocks)\b.{0,65}\b(fall\w*|drop\w*|plung\w*|slid\w*|slump\w*|tumbles?|sell-off|selloff|misses?|disappoint\w*)\b/.test(t),'Tech shares ki weakness risk appetite ko pressure de sakti hai; crypto par yeh indirect link hai.');
  add('up',/\b(nvidia|nvda|nasdaq|tech stocks|ai stocks)\b.{0,65}\b(rall\w*|rise\w*|rises|rose|surge\w*|jump\w*|gains?|beats?)\b/.test(t),'Tech strength risk appetite ko support kar sakti hai; crypto ka apna reaction confirm karein.');
  add('up',/\b(fed|fomc)\b.{0,45}\b(cuts?|cutting|eases?|easing)\b.{0,20}\b(rates?|monetary policy)\b|\b(fed|fomc)\b.{0,30}\brate cuts?\b/.test(t),'Policy easing financial conditions ko support kar sakti hai; expectations aur Fed guidance phir bhi matter karti hain.');

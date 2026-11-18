@@ -1,3 +1,4 @@
+import {thresholdFor} from './coinThresholds.js';
 import {useEffect,useRef,useState} from 'react';
 import {COINS} from './netflow.js';
 import {LiveMinuteFlow} from './liveMinuteFlow.js';
@@ -5,9 +6,10 @@ const STORAGE='spot-minute-flow-events-v1';
 const LOG_PENDING='spot-netflow-pending-log-v1';
 const HOSTS=['wss://data-stream.binance.vision/stream','wss://stream.binance.com:443/stream','wss://stream.binance.com:9443/stream'];
 function loadEvents() {
-  try {const saved=JSON.parse(localStorage.getItem(STORAGE)||'[]');return Array.isArray(saved)?saved.filter(x=>COINS.includes(x.symbol)&&['BUY','SELL'].includes(x.side)&&Number.isFinite(x.time)&&Number.isFinite(x.net)&&Math.abs(x.net)>=5000000).slice(0,100):[];}catch{return [];}
+  try {const saved=JSON.parse(localStorage.getItem(STORAGE)||'[]');return Array.isArray(saved)?saved.filter(x=>Number.isFinite(x.thresholdUSDT??thresholdFor(x.symbol))&&['BUY','SELL'].includes(x.side)&&Number.isFinite(x.time)&&Number.isFinite(x.net)&&Math.abs(x.net)>=(x.thresholdUSDT??thresholdFor(x.symbol))).slice(0,100):[];}catch{return [];}
 }
-export default function useLiveMinuteFlow(onLiveEvent) {
+export default function useLiveMinuteFlow(onLiveEvent,additionalSymbols=[]) {
+  const symbolKey=[...new Set(additionalSymbols)].sort().join(',');
   const callback=useRef(onLiveEvent);
   useEffect(()=>{callback.current=onLiveEvent;},[onLiveEvent]);
   const [view,setView]=useState({status:'connecting',rows:[],lastMessage:null,transport:'connecting'});
@@ -31,8 +33,9 @@ export default function useLiveMinuteFlow(onLiveEvent) {
       }catch{if(!stopped)setLogError('Log save pending: retrying automatically. Keep the page open.');}
       finally{logBusy=false;}
     }
+    const symbols=[...new Set([...COINS,...symbolKey.split(',').filter(Boolean)])];
     const restored=loadEvents();
-    const engine=new LiveMinuteFlow(),seen=new Set(restored.map(e=>e.id)),lastEvent=new Map();
+    const engine=new LiveMinuteFlow(Date.now(),symbols),seen=new Set(restored.map(e=>e.id)),lastEvent=new Map();
     restored.forEach(e=>{const key=e.symbol+'-'+e.side;lastEvent.set(key,Math.max(e.time,lastEvent.get(key)??-Infinity));});
     function record(event) {
       if(!event||seen.has(event.id))return;seen.add(event.id);
@@ -76,7 +79,7 @@ export default function useLiveMinuteFlow(onLiveEvent) {
       restBusy=true;const ctrl=new AbortController();restController=ctrl;
       const timeout=setTimeout(()=>ctrl.abort(),45000);
       try {
-        const response=await fetch('/api/spot-live-minute',{signal:ctrl.signal});
+        const response=await fetch(`/api/spot-live-minute?symbols=${encodeURIComponent(symbols.join(','))}`,{signal:ctrl.signal});
         if(!response.ok)throw Error('Live REST endpoint unavailable');
         const body=await response.json();
         if(!Array.isArray(body.rows))throw Error('Invalid live REST response');
@@ -86,7 +89,7 @@ export default function useLiveMinuteFlow(onLiveEvent) {
     }
     function connect() {
       if(stopped)return;status='connecting';engine.reset(Date.now());lastMessage=null;publish();
-      const streams=COINS.map(s=>`${s.toLowerCase()}usdt@aggTrade`).join('/');
+      const streams=symbols.map(s=>`${s.toLowerCase()}usdt@aggTrade`).join('/');
       try {socket=new WebSocket(`${HOSTS[attempt%HOSTS.length]}?streams=${streams}`);}catch{status='offline';attempt++;retry=setTimeout(connect,3000);publish();return;}
       handshake=setTimeout(()=>socket?.close(),8000);
       socket.onopen=()=>{clearTimeout(handshake);if(stopped)return;status='live';openedAt=Date.now();engine.reset(openedAt);publish();};
@@ -99,6 +102,6 @@ export default function useLiveMinuteFlow(onLiveEvent) {
     }
     connect();poll();flushLogs();timer=setInterval(publish,250);pollTimer=setInterval(()=>{poll();flushLogs();},3000);
     return()=>{stopped=true;clearTimeout(retry);clearTimeout(handshake);clearInterval(timer);clearInterval(pollTimer);restController?.abort();if(socket){socket.onclose=null;socket.close();}};
-  },[]);
+  },[symbolKey]);
   return {...view,events,storageError,logError,logRevision,clearEvents:()=>setEvents([])};
 }

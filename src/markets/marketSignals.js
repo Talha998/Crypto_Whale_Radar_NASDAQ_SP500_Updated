@@ -1,10 +1,12 @@
-/** US market price-momentum signals from 5-minute SPY/QQQ ETF candles.
+/** US market price-momentum signals from 5-minute ETF candles.
  * NOT order-flow/whale signals: OHLCV data cannot establish aggressive taker side.
  * This module deliberately has no React/browser dependencies so it can be tested.
  */
 export const MARKET_INSTRUMENTS = [
   { symbol: 'QQQ', index: 'NASDAQ-100', subtitle: 'Invesco QQQ ETF · Nasdaq-100 proxy' },
   { symbol: 'SPY', index: 'S&P 500', subtitle: 'SPDR S&P 500 ETF · S&P 500 proxy' },
+  { symbol: 'GLD', index: 'Gold', subtitle: 'SPDR Gold Shares · gold price proxy' },
+  { symbol: 'SLV', index: 'Silver', subtitle: 'iShares Silver Trust · silver price proxy' },
 ];
 
 export const MOMENTUM_THRESHOLD_PCT = 0.25;
@@ -32,7 +34,9 @@ export function isUsRegularSession(now = new Date()) {
 // Input datetime is a New York local time string, as returned by Twelve Data.
 export function formatEtTime(datetime) {
   if (!datetime || !/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(datetime)) return '—';
-  return `${datetime.slice(11, 16)} ET · ${datetime.slice(0, 10)}`;
+  const [hour, minute] = datetime.slice(11, 16).split(':').map(Number);
+  const period = hour >= 12 ? 'PM' : 'AM';
+  return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${period} ET · ${datetime.slice(0, 10)}`;
 }
 
 // A 5m price candle may be delayed by the provider. Do not represent it as tick-by-tick live.
@@ -52,7 +56,7 @@ export function normalizeBars(values) {
 }
 
 export function computeMarketSignals(symbol, values, thresholdPct = MOMENTUM_THRESHOLD_PCT) {
-  if (!['SPY', 'QQQ'].includes(symbol)) return [];
+  if (!['SPY', 'QQQ', 'GLD', 'SLV'].includes(symbol)) return [];
   const candles = normalizeBars(values);
   const signals = [];
   let lastEmission = null;
@@ -81,7 +85,7 @@ export function computeMarketSignals(symbol, values, thresholdPct = MOMENTUM_THR
     const signal = {
       id: `${symbol}-${side}-${current.time}`,
       symbol,
-      index: symbol === 'QQQ' ? 'NASDAQ-100' : 'S&P 500',
+      index: ({QQQ:'NASDAQ-100',SPY:'S&P 500',GLD:'Gold',SLV:'Silver'})[symbol],
       side, time: current.time,
       price: current.close,
       previousPrice: start.close,

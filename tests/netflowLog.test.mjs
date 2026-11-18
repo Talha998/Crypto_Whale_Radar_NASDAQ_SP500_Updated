@@ -53,11 +53,11 @@ test('disk write failure is visible instead of falsely confirming a save',async 
 test('REST event capture invokes durable log callback without depending on browser alarms',async()=>{
  const recorded=[];
  const service=createLiveRestService({clock:()=>now,onEvent:async e=>recorded.push(e),fetcher:async url=>({ok:true,status:200,json:async()=>url.includes('/time')?{serverTime:now}:[{a:1,T:now,p:'100000',q:'60',m:false}]})});
- const response=await service();assert.equal(recorded.length,5);assert.equal(response.logError,'');assert.equal(recorded[0].windowSeconds,60);
+ const response=await service();assert.equal(recorded.length,6);assert.equal(response.logError,'');assert.equal(recorded[0].windowSeconds,60);
 });
 test('logging failure does not stop live price or threshold alarms',async()=>{
  const service=createLiveRestService({clock:()=>now,onEvent:async()=>{throw Error('disk failed');},fetcher:async url=>({ok:true,status:200,json:async()=>url.includes('/time')?{serverTime:now}:[{a:1,T:now,p:'100000',q:'60',m:false}]})});
- const response=await service();assert.equal(response.stale,false);assert.equal(response.events.length,5);assert.match(response.logError,/save/);
+ const response=await service();assert.equal(response.stale,false);assert.equal(response.events.length,6);assert.match(response.logError,/save/);
 });
 test('CSV download before the first event is a valid header-only file',async t=>{
  const file=await fixture(t),log=createNetflowLog({file,clock:()=>now});let csv='';

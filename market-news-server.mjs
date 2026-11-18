@@ -41,9 +41,11 @@ export function mergeNews(previous,incoming,now){
  }
  return [...byTitle.values()].sort((a,b)=>(b.publishedAt??b.firstSeen)-(a.publishedAt??a.firstSeen)).slice(0,1000);
 }
+function pktDate(ms){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(ms);}
 export function createNewsService({fetcher=fetch,clock=Date.now,file=resolve('logs/market-news.json'),feeds=NEWS_FEEDS}={}){
- let archive=[],cached,pending,lastAttempt=0,storageError='',archiveReadFailed=false;
+ let archive=[],cached,pending,lastAttempt=0,storageError='',archiveReadFailed=false,clearedDates=new Set();
  const ready=readFile(file,'utf8').then(t=>{const parsed=JSON.parse(t);if(Array.isArray(parsed))archive=parsed.filter(a=>a.title&&safeURL(a.url));else throw Error();}).catch(e=>{if(e.code!=='ENOENT'){archiveReadFailed=true;storageError='News archive could not be read; the live feed is still available and the old file is retained.';}});
+ const clearReady=readFile(resolve(dirname(file),'market-news-cleared-dates.json'),'utf8').then(t=>{const parsed=JSON.parse(t);if(Array.isArray(parsed))clearedDates=new Set(parsed.filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)));}).catch(()=>{});
  async function download(feed){
   const res=await fetcher(feed.url,{signal:AbortSignal.timeout(12000),headers:{Accept:'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9','User-Agent':'CryptoMarketNewsMonitor/1.0'}});
   if(!res.ok)throw Error(`HTTP ${res.status}`);
@@ -51,12 +53,21 @@ export function createNewsService({fetcher=fetch,clock=Date.now,file=resolve('lo
   return parseNewsFeed(text,feed);
  }
  async function refresh(){
-  await ready;const results=await Promise.allSettled(feeds.map(download)),now=clock();
+  await Promise.all([ready,clearReady]);const results=await Promise.allSettled(feeds.map(download)),now=clock();
   const sources=results.map((r,i)=>({id:feeds[i].id,name:feeds[i].name,status:r.status==='fulfilled'?'ok':'unavailable',count:r.status==='fulfilled'?r.value.length:0,checkedAt:now,error:r.status==='rejected'?'Feed blocked, timed out or unavailable':''}));
-  const incoming=results.flatMap(r=>r.status==='fulfilled'?r.value:[]);archive=mergeNews(archive,incoming,now);
+  const incoming=results.flatMap(r=>r.status==='fulfilled'?r.value:[]);archive=mergeNews(archive,incoming,now).filter(a=>!clearedDates.has(pktDate(a.publishedAt??a.firstSeen)));
   try{if(archiveReadFailed)throw Error('Unreadable archive retained');await mkdir(dirname(file),{recursive:true});await writeFile(file+'.tmp',JSON.stringify(archive),'utf8');await rename(file+'.tmp',file);storageError='';}catch{storageError=archiveReadFailed?'News archive unreadable; original file retained. New first-seen history is in memory only.':'Could not save news archive; first-seen history may not survive restart.';}
   return {articles:archive,sources,fetchedAt:now,refreshSeconds:120,stale:sources.every(s=>s.status!=='ok'),storageError,notice:'Headline-based possible impact; not verified causation, a trading signal or a win probability. Publisher timestamps and local first-seen times are different.'};
  }
- return async()=>{if(cached&&clock()-lastAttempt<120000)return cached;if(pending)return pending;lastAttempt=clock();pending=refresh().then(x=>cached=x).finally(()=>pending=null);return pending;};
+ const service=async()=>{if(cached&&clock()-lastAttempt<120000)return cached;if(pending)return pending;lastAttempt=clock();pending=refresh().then(x=>cached=x).finally(()=>pending=null);return pending;};
+ service.clearDate=async(date)=>{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(`${date}T00:00:00Z`)))throw Error('Invalid date');
+  await Promise.all([ready,clearReady]);clearedDates.add(date);
+  archive=archive.filter(a=>pktDate(a.publishedAt??a.firstSeen)!==date);
+  await mkdir(dirname(file),{recursive:true});
+  await Promise.all([writeFile(file+'.tmp',JSON.stringify(archive),'utf8').then(()=>rename(file+'.tmp',file)),writeFile(resolve(dirname(file),'market-news-cleared-dates.json'),JSON.stringify([...clearedDates].sort()),'utf8')]);
+  cached=null;lastAttempt=0;return {cleared:true,date};
+ };
+ return service;
 }
-export function marketNewsPlugin(){function attach(server){const service=createNewsService();server.middlewares.use('/api/market-news',async(req,res)=>{res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');if(req.method!=='GET'){res.statusCode=405;res.end(JSON.stringify({error:'Method not allowed'}));return;}try{res.end(JSON.stringify(await service()));}catch{res.statusCode=503;res.end(JSON.stringify({error:'Market news temporarily unavailable'}));}});}return {name:'market-news-impact',configureServer:attach,configurePreviewServer:attach};}
+export function marketNewsPlugin(){function attach(server){const service=createNewsService();server.middlewares.use('/api/market-news',async(req,res)=>{res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');if(req.method==='DELETE'){try{if(req.headers.origin&&new URL(req.headers.origin).host!==req.headers.host){res.statusCode=403;res.end(JSON.stringify({error:'Origin not allowed'}));return;}let body='';for await(const chunk of req){body+=chunk;if(body.length>1024)throw Error();}const {date}=JSON.parse(body);res.end(JSON.stringify(await service.clearDate(date)));}catch(e){res.statusCode=e.message==='Invalid date'?400:500;res.end(JSON.stringify({error:e.message==='Invalid date'?'Invalid date':'Could not clear news for this date'}));}return;}if(req.method!=='GET'){res.statusCode=405;res.end(JSON.stringify({error:'Method not allowed'}));return;}try{res.end(JSON.stringify(await service()));}catch{res.statusCode=503;res.end(JSON.stringify({error:'Market news temporarily unavailable'}));}});}return {name:'market-news-impact',configureServer:attach,configurePreviewServer:attach};}

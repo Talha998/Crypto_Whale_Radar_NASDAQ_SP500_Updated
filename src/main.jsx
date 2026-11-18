@@ -50,15 +50,16 @@ function pct(v) {
 }
 
 function formatTime(ms) {
-  return new Date(ms).toLocaleTimeString([], {
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  return new Date(ms).toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Karachi', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
   });
 }
 
 function formatDateTime(ms) {
-  return new Date(ms).toLocaleString([], {
+  return new Date(ms).toLocaleString('en-US', {
+    timeZone: 'Asia/Karachi',
     month: 'short', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
+    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
   });
 }
 
@@ -312,7 +313,7 @@ function App() {
       setSignalAlarmEnabled(true);
       signalAlarmEnabledRef.current = true;
       netflowAlarmGateRef.current.arm(Date.now());
-      setAlarmMessage('Signal alarm armed · includes 1-minute ±$5M netflow');
+      setAlarmMessage('Signal alarm armed · includes per-coin 1-minute netflow thresholds');
       playAlarmTone(audioContextRef.current, 'BUY');
     } catch (err) {
       setAlarmMessage(err?.message || 'Unable to enable signal alarm');
@@ -337,6 +338,27 @@ function App() {
       } catch (error) {
         console.warn('US market desktop alert unavailable:', error);
       }
+    }
+  };
+
+  const alertMarketNews = (article) => {
+    if (!signalAlarmEnabledRef.current) return;
+    const bullish = article.impact?.direction === 'Potential bullish';
+    const side = bullish ? 'BUY' : 'SELL';
+    const label = `${bullish ? 'BULLISH' : 'BEARISH'} NEWS · ${article.impact?.coins?.join(', ') || 'Broad market'}`;
+    const ctx = audioContextRef.current;
+    if (ctx) {
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      if (ctx.state === 'running') playAlarmTone(ctx, side);
+    }
+    setAlarmMessage(`News alarm: ${label} · ${formatPakistanDateTime(Date.now())}`);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(`${label} · ${article.impact?.importance || 'Watch'}`, {
+          body: article.title,
+          tag: `market-news-${article.id}`,
+        });
+      } catch { /* Visual news headline remains available. */ }
     }
   };
 
@@ -660,7 +682,6 @@ function App() {
   return (
     <main className="shell">
       <SpotNetflowPanel alarmEnabled={signalAlarmEnabled} alarmMessage={alarmMessage} onEnableAlarm={enableSignalAlarm} onDisableAlarm={disableSignalAlarm} onTestAlarm={testSignalAlarm} onNetflowAlarm={alertSpotNetflow} />
-      <MarketNewsPanel />
       <header className="hero">
         <div>
           <div className="eyebrow">REAL-TIME MULTI-COIN WHALE PRESSURE</div>
@@ -962,6 +983,7 @@ function App() {
           <div><strong>Signal laptop alarm</strong><p>Enable it once in the browser. Every whale-pressure signal from any monitored coin then plays a three-tone alert and can also show a desktop notification.</p></div>
         </div>
       </section>
+      <MarketNewsPanel alarmEnabled={signalAlarmEnabled} onNewsSignal={alertMarketNews} />
     </main>
   );
 }

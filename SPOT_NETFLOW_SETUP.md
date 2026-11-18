@@ -1,9 +1,9 @@
-# Persistent $5M+ event log
+# Persistent netflow event log
 
-The top panel now includes **Saved $5M+ netflow log · 1 minute** and **Download full CSV**.
+The top panel now includes **Saved netflow log · 1 minute** and **Download full CSV**.
 
-Each verified event at +5,000,000 USDT or higher, or -5,000,000 USDT or lower, saves:
-- Coin name (BTC, ETH, BNB, USDC or XRP).
+Each verified event saves at +$5,000,000 or higher or -$5,000,000 or lower for the six core coins; daily gainers/losers use ±$2,000,000. It records:
+- Coin name (core coins or a selected daily mover).
 - Direction: net buying or net selling.
 - Signed 60-second netflow and observed trade price.
 - Calendar date and time in Asia/Karachi (PKT), plus UTC time.
@@ -21,7 +21,7 @@ Validation: production build and **77 automated tests passed**. Log-specific che
 
 ---
 
-# 1-minute ±$5M sound alarm
+# 1-minute core and daily-mover sound alarms
 
 The top panel now has **Enable alarm**, **Disable**, and **Test sound** controls using the existing shared laptop signal alarm. No additional application or API key is needed.
 
@@ -30,7 +30,7 @@ The top panel now has **Enable alarm**, **Disable**, and **Test sound** controls
 3. Use **Test sound** to check your speaker volume. Test does not arm the alarm by itself.
 4. Keep the tab open and active. After a page reload, enable sound again.
 
-When a new verified rolling-60-second netflow event reaches **+5,000,000 USDT or higher**, a buying tone plays. At **−5,000,000 USDT or lower**, a selling tone plays. This applies independently to BTC, ETH, BNB, USDC and XRP, regardless of the selected card interval. A screen banner shows the coin, signed amount, observed price, date and Pakistan time. Dismiss clears the banner but keeps event history. Desktop notifications are also shown if permission has been granted.
+When a new verified rolling-60-second netflow event reaches **±$5,000,000** for BTC, USDC, ETH, BNB, SOL or XRP, or **±$2,000,000** for one of the five daily gainers/five daily losers, the matching buy/sell tone plays. The daily list excludes core coins, stablecoins and leveraged tokens, and requires at least $10M 24-hour quote volume. A screen banner shows each qualifying crossing and desktop notifications appear if permission is granted.
 
 Visual alerts and event history remain available when sound is disabled. The same event never sounds twice; same-coin/same-direction crossings have a 60-second cooldown. Old saved/cached history, events observed before arming, stale events and incomplete minutes cannot sound. Sound is emitted for newly observed crossings; turning it on does not replay a threshold already recorded while sound was off.
 
@@ -43,11 +43,11 @@ In REST fallback mode, alarms fire when the next approximately 3-second refresh 
 ## What's fixed
 The price and 1-minute columns previously depended on browser WebSocket access. If the connection was blocked, both stayed blank even when the older REST history columns worked.
 
-The panel now starts a server-side REST fallback immediately. It fetches the complete latest 60 seconds of Binance aggregate trades (with pagination), calculates net taker buying minus selling, and returns the latest actual trade price for all five coins. Refresh interval: approximately 3 seconds plus network time. Data is cached across tabs to limit API requests. No API key is required.
+The panel now starts a server-side REST fallback immediately. It fetches the complete latest 60 seconds of Binance aggregate trades (with pagination), calculates net taker buying minus selling, and returns the latest actual trade price for six core coins and selected daily movers. Refresh interval: approximately 3 seconds plus network time. Data is cached across tabs to limit API requests. No API key is required.
 
 Status **LIVE · REST · 3s** means fallback is working. When WebSocket streaming is available and has a complete minute, **LIVE · WebSocket** is shown. The fallback is kept as standby. If both fail, the panel reports offline and marks last-known data stale.
 
-REST mode detects $5M+ crossings at refresh times, rather than on every individual trade. Network outages or browser suspension can interrupt tracking. Keep the page open and active.
+REST mode detects threshold crossings at refresh times, rather than on every individual trade. Network outages or browser suspension can interrupt tracking. Keep the page open and active. Daily movers update once per Pakistan calendar date; the page checks for a new daily list every five minutes.
 
 ## Replace the previous version
 1. Stop the old terminal server with Ctrl+C.

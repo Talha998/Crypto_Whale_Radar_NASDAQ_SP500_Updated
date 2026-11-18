@@ -1,15 +1,16 @@
+import {thresholdFor} from './coinThresholds.js';
 import {COINS} from './netflow.js';
 export const LIVE_WINDOW_MS = 60000;
-export const LIVE_THRESHOLD = 5000000;
+
 export function pktDateTime(ms) {
-  return Number.isFinite(ms) ? new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Karachi',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(ms)+' PKT' : 'Waiting for live trade';
+  return Number.isFinite(ms) ? new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Karachi',day:'2-digit',month:'short',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}).format(ms)+' PKT' : 'Waiting for live trade';
 }
 export function livePrice(value) {
   return Number.isFinite(value) ? '$'+value.toLocaleString('en-US',{minimumFractionDigits:value<2?4:2,maximumFractionDigits:value<2?6:2}) : '—';
 }
 export class LiveMinuteFlow {
-  constructor(now=Date.now()) { this.reset(now); }
-  reset(now) { this.states=new Map(COINS.map(symbol=>[symbol,{symbol,start:now,queue:[],head:0,buy:0,sell:0,lastId:null,lastTrade:null,price:null,regime:0,cooldown:{}}])); }
+  constructor(now=Date.now(),symbols=COINS) { this.symbols=[...new Set(symbols)];this.reset(now); }
+  reset(now) { this.states=new Map(this.symbols.map(symbol=>[symbol,{symbol,start:now,queue:[],head:0,buy:0,sell:0,lastId:null,lastTrade:null,price:null,regime:0,cooldown:{}}])); }
   ingest(trade,now=Date.now()) {
     const s=this.states.get(String(trade?.s||'').replace(/USDT$/,''));
     const price=Number(trade?.p),qty=Number(trade?.q),time=Number(trade?.T),id=trade?.a;
@@ -30,14 +31,15 @@ export class LiveMinuteFlow {
     }
     if(s.head>2000 && s.head>s.queue.length/2) {s.queue=s.queue.slice(s.head);s.head=0;}
     const net=s.buy-s.sell,ready=now-s.start>=LIVE_WINDOW_MS;
-    const regime=ready ? net>=LIVE_THRESHOLD?1:net<=-LIVE_THRESHOLD?-1:0 : 0;
+    const thresholdUSDT=thresholdFor(s.symbol);
+    const regime=ready ? net>=thresholdUSDT?1:net<=-thresholdUSDT?-1:0 : 0;
     let event=null;
     if(regime && regime!==s.regime && now-(s.cooldown[regime]??-Infinity)>=LIVE_WINDOW_MS) {
       s.cooldown[regime]=now;
-      event={id:`${s.symbol}-${now}-${regime}`,symbol:s.symbol,side:regime>0?'BUY':'SELL',net,buy:s.buy,sell:s.sell,price:s.price,time:now,tradeTime:s.lastTrade,windowSeconds:60,source:'Binance Spot USDT'};
+      event={id:`${s.symbol}-${now}-${regime}`,symbol:s.symbol,side:regime>0?'BUY':'SELL',net,buy:s.buy,sell:s.sell,price:s.price,time:now,tradeTime:s.lastTrade,thresholdUSDT,windowSeconds:60,source:'Binance Spot USDT'};
     }
     s.regime=regime;
-    return {symbol:s.symbol,net,buy:s.buy,sell:s.sell,price:s.price,lastTrade:s.lastTrade,ready,remaining:Math.max(0,Math.ceil((LIVE_WINDOW_MS-(now-s.start))/1000)),event};
+    return {symbol:s.symbol,thresholdUSDT,net,buy:s.buy,sell:s.sell,price:s.price,lastTrade:s.lastTrade,ready,remaining:Math.max(0,Math.ceil((LIVE_WINDOW_MS-(now-s.start))/1000)),event};
   }
-  snapshot(now=Date.now()) {return COINS.map(symbol=>this.evaluate(this.states.get(symbol),now));}
+  snapshot(now=Date.now()) {return this.symbols.map(symbol=>this.evaluate(this.states.get(symbol),now));}
 }

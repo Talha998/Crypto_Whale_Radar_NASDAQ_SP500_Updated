@@ -1,14 +1,18 @@
+## New: grouped coin thresholds + order-book depth
+
+BTC/USDC/ETH/BNB/SOL/XRP use fixed ±$5M rolling 60-second alerts. The table also adds the five biggest 24-hour gainers and five biggest 24-hour losers among liquid Binance USDT pairs, refreshed daily; these use ±$2M rolling-minute alerts. Daily movers require at least $10M in 24-hour quote volume. See [LIQUIDITY_AND_THRESHOLDS.md](LIQUIDITY_AND_THRESHOLDS.md).
+
 ## New: Market News & Possible Crypto Impact
 
 One panel combines Nvidia/tech, macro/Fed and crypto headlines with source links, Pakistan publication/first-seen times, possible bullish/bearish context and source health. Free public feeds refresh every 2 minutes. No API key is required. See [MARKET_NEWS_GUIDE.md](MARKET_NEWS_GUIDE.md).
 
 ## New: persistent netflow logs
 
-Every observed 1-minute ±$5M event now saves date, Pakistan time, coin, direction, netflow and price to `logs/spot-netflow.jsonl`. View **Saved $5M+ netflow log** or use **Download full CSV**. Restart the Node server for the new endpoints.
+Every observed 1-minute threshold event saves date, Pakistan time, coin, direction, netflow and price to `logs/spot-netflow.jsonl`. Core coin events use ±$5M and daily movers use ±$2M. View **Saved netflow log** or use **Download full CSV**.
 
 ## New: 1-minute ±$5M sound alarm
 
-Click **Enable alarm** in the top netflow panel once, then use **Test sound**. New positive and negative $5M netflow events play distinct tones and show a dated screen alert. Full setup: [SPOT_NETFLOW_SETUP.md](SPOT_NETFLOW_SETUP.md).
+Click **Enable alarm** in the netflow panel once, then use **Test sound**. Positive and negative flow events use distinct tones. Full setup: [SPOT_NETFLOW_SETUP.md](SPOT_NETFLOW_SETUP.md).
 
 ## Live 1-minute netflow and prices
 

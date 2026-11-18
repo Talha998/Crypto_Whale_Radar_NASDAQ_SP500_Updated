@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const SYMBOLS = new Set(['SPY', 'QQQ']);
+const SYMBOLS = new Set(['SPY', 'QQQ', 'GLD', 'SLV']);
 const FIVE_MINUTES = 5 * 60 * 1000;
 const cache = new Map();
 const pending = new Map();

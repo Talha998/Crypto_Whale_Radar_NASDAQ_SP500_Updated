@@ -52,7 +52,7 @@ export function createNetflowService({key = '', fetcher = fetch, clock = Date.no
     }));
     if (!caps || now-capTime > 300000) {
       try {
-        const data = await get('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,binancecoin,usd-coin,ripple');
+        const data = await get('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,binancecoin,usd-coin,ripple,solana');
         if (Array.isArray(data)) { caps = Object.fromEntries(data.map(d=>[d.symbol.toUpperCase(),finite(d.market_cap)])); capTime = clock(); }
       } catch { /* Market caps are optional; flow remains independent. */ }
     }

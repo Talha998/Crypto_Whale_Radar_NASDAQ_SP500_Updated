@@ -8,9 +8,9 @@ test('REST fallback bootstraps full minute, price, exact signed volume and cache
  let calls=0;
  const service=createLiveRestService({clock:()=>start,fetcher:async url=>{calls++;return response(url.includes('/time')?{serverTime:start}:[trade(1,start-1000,7000000),trade(2,start,2000000,true)]);}});
  const [a,b]=await Promise.all([service(),service()]);
- assert.deepEqual(a,b);assert.equal(calls,6);assert.equal(a.stale,false);assert.equal(a.rows.length,5);
+ assert.deepEqual(a,b);assert.equal(calls,7);assert.equal(a.stale,false);assert.equal(a.rows.length,6);
  assert.equal(a.rows[0].net,5000000);assert.equal(a.rows[0].price,100000);assert.equal(a.rows[0].ready,true);assert.equal(a.rows[0].lastTrade,start);assert.equal(a.events[0].time,start);
- await service();assert.equal(calls,6);
+ await service();assert.equal(calls,7);
 });
 test('trade pagination consumes all records instead of truncating a busy BTC minute',async()=>{
  const page=Array.from({length:1000},(_,i)=>trade(i+1,start-1000,100));
@@ -20,7 +20,7 @@ test('trade pagination consumes all records instead of truncating a busy BTC min
    if(url.includes('fromId=')){secondPages++;return response([trade(1001,start,100)]);}
    return response(page);
  }});
- const r=await service();assert.equal(secondPages,5);assert.equal(r.rows[0].tradeCount,1001);assert.equal(r.rows[0].net,100100);
+ const r=await service();assert.equal(secondPages,6);assert.equal(r.rows[0].tradeCount,1001);assert.equal(r.rows[0].net,100100);
 });
 test('missing trade IDs and malformed prices cannot create a verified netflow',async()=>{
  const service=createLiveRestService({clock:()=>start,fetcher:async url=>response(url.includes('/time')?{serverTime:start}:[trade(1,start-1),trade(3,start)])});
@@ -35,8 +35,8 @@ test('failed refresh retains values as stale and never emits fresh events',async
 test('repeated above-threshold snapshots do not spam events and negative crossing records selling',async()=>{
  let now=start,sell=false;
  const service=createLiveRestService({clock:()=>now,fetcher:async url=>response(url.includes('/time')?{serverTime:now}:[trade(1,now,6e6,sell)])});
- const a=await service();assert.equal(a.events.length,5);now+=3100;const b=await service();assert.equal(b.events.length,5);
- now+=3100;sell=true;const c=await service();assert.equal(c.events.length,10);assert.equal(c.events[0].side,'SELL');assert.equal(c.events[0].net,-6e6);
+ const a=await service();assert.equal(a.events.length,6);now+=3100;const b=await service();assert.equal(b.events.length,6);
+ now+=3100;sell=true;const c=await service();assert.equal(c.events.length,12);assert.equal(c.events[0].side,'SELL');assert.equal(c.events[0].net,-6e6);
 });
 test('quiet minute has zero net flow, with latest known actual trade price',async()=>{
  const service=createLiveRestService({clock:()=>start,fetcher:async url=>response(url.includes('/time')?{serverTime:start}:url.includes('limit=1')&&!url.includes('limit=1000')?[trade(1,start-120000,100)]:[])});
