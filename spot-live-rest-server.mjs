@@ -2,20 +2,25 @@ import {thresholdFor} from './src/netflow/coinThresholds.js';
 import {createNetflowLog,attachNetflowLog} from './netflow-log-server.mjs';
 import {COINS} from './src/netflow/netflow.js';
 import {isCurrentDailyMover} from './daily-movers-server.mjs';
+import {TRADFI_SYMBOLS} from './src/netflow/tradFiMarkets.js';
+import {SPOT_MARKET,FUTURES_MARKET} from './binance-market-data.mjs';
 const LIMIT=1000, MAX_PAGES=30;
 
 // Exact trade-based rolling minute. Used when the browser's WebSocket is blocked.
-export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=async()=>{}}={}) {
+export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=async()=>{},market=SPOT_MARKET,
+  allowedSymbol=symbol=>COINS.includes(symbol)||isCurrentDailyMover(symbol),
+  alarms=true, refreshMs=3000,
+}={}) {
   let cached,pending,lastAttempt=0,offset=0,offsetAt=null,deadline=Infinity,blockedUntil=0;
   const states=new Map(),events=[];
   async function get(path) {
     if(clock()<blockedUntil)throw Error('Binance rate limit cooldown');
     let last;
-    for(const host of ['https://data-api.binance.vision','https://api.binance.com']) {
+    for(const host of market.hosts) {
       try {
         const remaining=deadline-Date.now();
         if(remaining<=0)throw Error('Live snapshot timed out');
-        const res=await fetcher(host+path,{signal:AbortSignal.timeout(Math.max(1,Math.min(10000,remaining)))});
+        const res=await fetcher(host+market.prefix+path,{signal:AbortSignal.timeout(Math.max(1,Math.min(10000,remaining)))});
         if(res.status===429 || res.status===418) {
           blockedUntil=clock()+Math.max(60000,(Number(res.headers?.get?.('retry-after'))||60)*1000);
           throw Object.assign(Error('Binance rate limit: waiting before retry'),{limited:true});
@@ -28,7 +33,7 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
   }
   async function oneCoin(symbol,end) {
     const start=end-60000;
-    let page=await get(`/api/v3/aggTrades?symbol=${symbol}USDT&startTime=${start}&endTime=${end}&limit=${LIMIT}`);
+    let page=await get(`/aggTrades?symbol=${symbol}USDT&startTime=${start}&endTime=${end}&limit=${LIMIT}`);
     const trades=[];let complete=false,lastId=null;
     for(let count=0;count<MAX_PAGES;count++) {
       if(!Array.isArray(page))throw Error('Invalid trade response');
@@ -40,7 +45,7 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
       }
       if(page.length<LIMIT || Number(page.at(-1)?.T)>=end){complete=true;break;}
       if(count===MAX_PAGES-1)break;
-      page=await get(`/api/v3/aggTrades?symbol=${symbol}USDT&fromId=${lastId+1}&limit=${LIMIT}`);
+      page=await get(`/aggTrades?symbol=${symbol}USDT&fromId=${lastId+1}&limit=${LIMIT}`);
     }
     if(!complete)throw Error('Trade history is too busy to verify a complete minute');
     let buy=0,sell=0;
@@ -51,7 +56,7 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
     }
     let latest=trades.at(-1);
     if(!latest) {
-      const recent=await get(`/api/v3/aggTrades?symbol=${symbol}USDT&limit=1`);
+      const recent=await get(`/aggTrades?symbol=${symbol}USDT&limit=1`);
       if(Array.isArray(recent)&&recent.length)latest=recent[0];
     }
     const price=latest?Number(latest.p):null,lastTrade=latest?Number(latest.T):null;
@@ -63,7 +68,7 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
     const started=clock();
     if(offsetAt===null || started-offsetAt>60000) {
       // Align the range with exchange time instead of depending on a user's PC clock.
-      const time=await get('/api/v3/time');
+      const time=await get('/time');
       if(!Number.isFinite(time?.serverTime))throw Error('Exchange time unavailable');
       offset=time.serverTime-clock();offsetAt=clock();
     }
@@ -79,7 +84,7 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
       }
       const row=r.value;
       const old=states.get(symbol)||{regime:0,cooldown:{}};
-      const thresholdUSDT=thresholdFor(symbol);
+      const thresholdUSDT=alarms?thresholdFor(symbol):Infinity;
       const direction=row.net>=thresholdUSDT?1:row.net<=-thresholdUSDT?-1:0;
       if(direction&&direction!==old.regime&&observedAt-(old.cooldown[direction]??-Infinity)>=60000) {
         old.cooldown[direction]=observedAt;
@@ -92,16 +97,16 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
     });
     const saved=await Promise.allSettled(toLog.map(event=>onEvent(event)));
     const logError=saved.some(r=>r.status==='rejected')?'Could not save a netflow log entry':'';
-    return {rows,events:[...events],logError,fetchedAt:observedAt,ageMs,asOf:end,stale:rows.every(r=>r.stale),source:'Binance Spot · REST fallback · 3s'};
+    return {rows,events:[...events],logError,fetchedAt:observedAt,ageMs,asOf:end,stale:rows.every(r=>r.stale),source:market===FUTURES_MARKET?'Binance Futures · REST':'Binance Spot · REST fallback · 3s'};
   }
   return async(requestedSymbols=COINS)=>{
-    const symbols=[...new Set(requestedSymbols)].filter(symbol=>COINS.includes(symbol)||isCurrentDailyMover(symbol)).slice(0,16);
+    const symbols=[...new Set(requestedSymbols)].filter(allowedSymbol).slice(0,16);
     if(!symbols.length) return {rows:[],events:[],fetchedAt:clock(),stale:true,error:'No supported symbols requested'};
-    if(cached&&cached.symbols?.join(',')===symbols.join(',')&&clock()-lastAttempt<3000)return cached;
+    if(cached&&cached.symbols?.join(',')===symbols.join(',')&&clock()-lastAttempt<refreshMs)return cached;
     if(pending)return pending;
     lastAttempt=clock();
     pending=refresh(symbols).then(data=>cached={...data,symbols}).catch(()=>{
-      cached={rows:symbols.map(symbol=>({...cached?.rows.find(r=>r.symbol===symbol),symbol,stale:true})),events:[...events],fetchedAt:cached?.fetchedAt??null,stale:true,source:'Binance Spot · REST fallback · 3s',error:'Live REST API unavailable. Check server internet access and Binance restrictions.',symbols};return cached;
+      cached={rows:symbols.map(symbol=>({...cached?.rows.find(r=>r.symbol===symbol),symbol,stale:true})),events:[...events],fetchedAt:cached?.fetchedAt??null,stale:true,source:market===FUTURES_MARKET?'Binance Futures · REST':'Binance Spot · REST fallback · 3s',error:'Live REST API unavailable. Check server internet access and Binance restrictions.',symbols};return cached;
     }).finally(()=>{pending=null;});
     return pending;
   };
@@ -111,6 +116,20 @@ export function liveRestPlugin() {
     const log=createNetflowLog();
     attachNetflowLog(server.middlewares,log);
     const service=createLiveRestService({onEvent:event=>log.append(event,'Binance REST verified')});
+    const futures=createLiveRestService({
+      market:FUTURES_MARKET,allowedSymbol:symbol=>TRADFI_SYMBOLS.includes(symbol),
+      alarms:false,refreshMs:10000,
+    });
+    server.middlewares.use('/api/futures-live-minute',async(req,res)=>{
+      res.setHeader('Content-Type','application/json');
+      res.setHeader('Cache-Control','no-store');
+      if(req.method!=='GET'){
+        res.statusCode=405;
+        res.end(JSON.stringify({error:'Method not allowed'}));
+        return;
+      }
+      res.end(JSON.stringify(await futures(TRADFI_SYMBOLS)));
+    });
     server.middlewares.use('/api/spot-live-minute',async(req,res)=>{
       res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
       if(req.method!=='GET'){res.statusCode=405;res.end(JSON.stringify({error:'Method not allowed'}));return;}

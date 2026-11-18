@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-export default function useLiquidityDepth(){const [state,setState]=useState({rows:[],error:''});
+export default function useLiquidityDepth(){const [state,setState]=useState({rows:[],futuresRows:[],error:''});
  useEffect(()=>{let stopped=false,busy=false,controller;
   async function load(){if(busy)return;busy=true;controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),30000);
    try{const r=await fetch('/api/spot-depth',{signal:controller.signal});if(!r.ok)throw Error();const data=await r.json();if(!Array.isArray(data.rows))throw Error();if(!stopped)setState({...data,error:'',receivedAt:Date.now()});}

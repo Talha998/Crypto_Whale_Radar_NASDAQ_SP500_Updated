@@ -38,8 +38,13 @@ The `/api/spot-depth` Node endpoint requests up to 1,000 bid/ask levels per coin
 
 The book and 60-second executed flow are different data types and snapshots in time. Visible orders can change or cancel. Depth is shown as context and does **not** gate or suppress verified netflow alerts. A book snapshot does not establish a specific expected price move. USDC's flow is not a prediction that the stablecoin will pump.
 
-## Gold, silver, SPY and news alerts
-SPY is already monitored as the S&P 500 ETF proxy. GLD and SLV have been added as gold and silver ETF proxies to the 5-minute market momentum panel. These ETF price signals are not 1-minute $5M spot netflow; the app does not have exchange-wide gold/silver aggressor trade data. New headlines classified Potential bullish or Potential bearish play the existing distinct rising/falling sound and can send a desktop notification when the shared alarm is enabled. The initial feed load does not replay archived headlines.
+## Daily movers and traditional markets
+
+The daily gainers and losers use Binance Spot books (up to 500 levels per side) and Binance Spot candles for net taker flow. Both depth bands, the spread, and the book receipt time in PKT use the same display as the core pairs.
+
+Gold (XAUUSDT), Silver (XAGUSDT), and S&P 500 (SPYUSDT) use Binance USDⓈ-M perpetual contracts in the netflow table. All prices, book amounts, spreads, and netflow for each of these rows come from the named contract. The 60-second net taker flow refreshes every 10 seconds. These public endpoints do not require an API key. The Futures rows have no sound alarm threshold or market cap. The ETF price momentum panel remains available separately. Depth amounts use visible orders and show partial coverage when the snapshot stops short of the selected band.
+
+If Binance cannot provide a snapshot or enough history for a window, the corresponding cell shows unavailable. A successful depth timestamp comes from the received book, independent of the latest trade.
 
 ## Preserved features
 News and impact feeds, prices, historical columns, the REST stream fallback, sound controls, dated event history and full CSV logs remain present. The removed paper-trading lab remains absent.

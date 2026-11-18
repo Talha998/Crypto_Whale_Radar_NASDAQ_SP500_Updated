@@ -13,6 +13,7 @@ export function selectDailyMovers(tickers,now=Date.now(),minimumQuoteVolume=10_0
  const losers=rows.filter(x=>x.changePct<0).sort((a,b)=>a.changePct-b.changePct).slice(0,5).map(x=>({...x,side:'LOSER'}));
  return [...gainers,...losers].map(x=>({...x,thresholdUSDT:2_000_000}));
 }
+export function currentDailyMoverSymbols(){return cache?.movers.map(row=>row.symbol)??[];}
 export function isCurrentDailyMover(symbol){return isDailyMover(symbol);}
 export function createDailyMoversService({fetcher=fetch,clock=Date.now}={}){
  return async()=>{

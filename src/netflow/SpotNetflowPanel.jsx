@@ -5,14 +5,61 @@ import React, {useEffect,useRef,useState} from 'react';
 import {COINS,WINDOWS,usd} from './netflow.js';
 import useLiveMinuteFlow from './useLiveMinuteFlow.js';
 import {livePrice,pktDateTime} from './liveMinuteFlow.js';
+import {TRADFI_MARKETS} from './tradFiMarkets.js';
 import './netflow.css';
 const DISPLAY_WINDOWS=[['1m','1 minute · live',1],...WINDOWS];
+const TABLE_COLUMNS=DISPLAY_WINDOWS.length+8;
+const CORE_BADGES={BTC:'₿',ETH:'Ξ',BNB:'◆',USDC:'$',XRP:'✕',SOL:'◎'};
+
+function NetflowRow({symbol,name=symbol,badge,subtitle,stream,history,book,depthBand,depthError,tick,liveStale,threshold,thresholdLabel}) {
+  const band=book?.bands?.find(item=>item.band===depthBand);
+  const bookStale=!!depthError||book?.stale||!book?.fetchedAt||tick-book.fetchedAt>25000;
+  const liveValue=stream?.lastTrade?stream.net:null;
+  const thresholdHit=!liveStale&&stream?.ready&&Number.isFinite(threshold)&&Math.abs(liveValue)>=threshold;
+  const flowClass=(value,old)=>old?'flow-stale':value>0?'flow-positive':value<0?'flow-negative':'';
+  const depthCell=(side)=>{
+    const complete=band?.[side+'Complete'];
+    const amount=band?.[side+'USDT'];
+    return <td className={bookStale?'flow-stale':''}>
+      {band?`${complete?'':'≥ '}${usd(amount,false)}`:'—'}
+      <small>{bookStale?'STALE / UNAVAILABLE':complete?'FULL BAND':'PARTIAL BOOK'}</small>
+    </td>;
+  };
+  return <tr>
+    <th scope="row">
+      <span className={`coin-icon coin-${symbol}`}>{badge}</span>{name}
+      {subtitle&&<small className="netflow-symbol-detail">{subtitle}</small>}
+    </th>
+    <td className={liveStale?'flow-stale':''}>{livePrice(stream?.price)}</td>
+    <td className="netflow-threshold">
+      {Number.isFinite(threshold)?`±${usd(threshold,false)}`:'—'}
+      <small>{thresholdLabel}</small>
+    </td>
+    <td className={`${flowClass(liveValue,liveStale)} ${thresholdHit?'flow-large':''}`}>
+      {usd(liveValue)}
+      <small>{thresholdHit?'THRESHOLD HIT':!stream?.ready?'WAITING / PARTIAL':'ROLLING 60s'}</small>
+    </td>
+    {depthCell('bid')}{depthCell('ask')}
+    <td className={bookStale?'flow-stale':''}>{Number.isFinite(book?.spreadPct)?book.spreadPct.toFixed(4)+'%':'—'}</td>
+    <td className={`netflow-depth-time ${bookStale?'flow-stale':''}`}>
+      {book?.fetchedAt?pktDateTime(book.fetchedAt):'Waiting for depth'}
+    </td>
+    {WINDOWS.map(([key,label])=>{
+      const value=history?.values?.[key];
+      const old=!history||history.stale||!!history.error;
+      return <td key={key} className={flowClass(value,old)} title={`${symbol} · ${label}: ${usd(value)} net taker flow`}>{usd(value)}</td>;
+    })}
+    <td>{usd(history?.marketCap,false)}</td>
+  </tr>;
+}
+
 export default function SpotNetflowPanel({alarmEnabled=false,alarmMessage='',onEnableAlarm,onDisableAlarm,onTestAlarm,onNetflowAlarm}) {
   const [data,setData]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[tick,setTick]=useState(Date.now());
   const [selected,setSelected]=useState('1m');
   const [depthBand,setDepthBand]=useState(0.005),depth=useLiquidityDepth();
   const [latestAlarm,setLatestAlarm]=useState(null);
   const [dailyMovers,setDailyMovers]=useState([]),[moversUpdated,setMoversUpdated]=useState(null),[moversError,setMoversError]=useState('');
+  const [futuresLive,setFuturesLive]=useState({rows:[],error:''});
   const live=useLiveMinuteFlow(event=>{setLatestAlarm(event);onNetflowAlarm?.(event);},dailyMovers.map(x=>x.symbol)),healthy=live.status==='live';
   const active=useRef(false),controller=useRef();
   const refresh=async()=>{
@@ -27,6 +74,29 @@ export default function SpotNetflowPanel({alarmEnabled=false,alarmMessage='',onE
     const load=async()=>{if(busy)return;busy=true;controller=new AbortController();try{const res=await fetch('/api/spot-movers',{signal:controller.signal});if(!res.ok)throw Error();const body=await res.json();if(!Array.isArray(body.movers)||body.movers.length!==10)throw Error();if(!stopped){setDailyMoverSymbols(body.movers.map(x=>x.symbol));setDailyMovers(body.movers);setMoversUpdated(body.updatedAt);setMoversError(body.error||'');}}catch{if(!stopped)setMoversError('Daily gainers/losers list unavailable. Retrying automatically.');}finally{busy=false;}};
     load();const timer=setInterval(load,5*60*1000);return()=>{stopped=true;clearInterval(timer);controller?.abort();};
   },[]);
+  useEffect(()=>{
+    let stopped=false,controller;
+    async function load(){
+      if(controller)return;
+      controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),30000);
+      try{
+        const response=await fetch('/api/futures-live-minute',{signal:controller.signal});
+        if(!response.ok)throw Error('Futures minute feed unavailable');
+        const body=await response.json();
+        if(!Array.isArray(body.rows))throw Error('Invalid Futures minute feed');
+        if(!stopped)setFuturesLive(body);
+      }catch{
+        if(!stopped)setFuturesLive(previous=>({...previous,error:'Futures minute feed unavailable; retrying.'}));
+      }finally{
+        clearTimeout(timeout);
+        controller=null;
+      }
+    }
+    load();
+    const timer=setInterval(load,10000);
+    return()=>{stopped=true;clearInterval(timer);controller?.abort();};
+  },[]);
   const stale=!!error||data?.stale||!data?.fetchedAt||tick-data.fetchedAt>90000;
   const rows=COINS.map(symbol=>{
     const historical=data?.rows.find(r=>r.symbol===symbol)||{symbol,values:{}};
@@ -35,6 +105,14 @@ export default function SpotNetflowPanel({alarmEnabled=false,alarmMessage='',onE
   });
   const label=DISPLAY_WINDOWS.find(w=>w[0]===selected)?.[1];
   const cellStale=(row,key)=>key==='1m'?!healthy||!!row.stream?.stale:stale||!!row.error;
+  function renderSpotRow(symbol,badge,subtitle,thresholdLabel){
+    const stream=live.rows.find(row=>row.symbol===symbol);
+    return <NetflowRow key={symbol} symbol={symbol} badge={badge} subtitle={subtitle} stream={stream}
+      history={data?.rows.find(row=>row.symbol===symbol)} book={depth.rows.find(row=>row.symbol===symbol)}
+      depthBand={depthBand} depthError={depth.error} tick={tick}
+      liveStale={!healthy||!stream||!!stream.stale||!stream.lastTrade||tick-stream.lastTrade>15000}
+      threshold={thresholdFor(symbol)} thresholdLabel={thresholdLabel} />;
+  }
   return <section className="netflow-panel" aria-label="Cryptocurrency Spot Netflow Statistics">
     <div className="netflow-heading"><div><span className="netflow-eyebrow">SPOT MONEY FLOW · 6 CORE + 10 DAILY MOVERS</span><h2>Cryptocurrency Spot Netflow Statistics</h2><p>Binance Spot · live USDT prices &amp; rolling 60-second flow <span className={`netflow-status ${healthy?'':'waiting'}`}>{healthy?`LIVE · ${live.transport}`:live.status.toUpperCase()}</span></p><p className="netflow-clock">{pktDateTime(tick)}</p></div><button onClick={refresh} disabled={busy}>{busy?'Updating history…':'Refresh history'}</button></div>
     <div className="netflow-alarm-controls"><div><b>1-minute sound alarms · BUY &amp; SELL</b><small>BTC, USDC, ETH, BNB, SOL, XRP: ±$5.00M. Daily 5 gainers + 5 losers: ±$2.00M net flow in a rolling 60 seconds.</small></div><button type="button" className={alarmEnabled?'is-armed':''} onClick={alarmEnabled?onDisableAlarm:onEnableAlarm}>{alarmEnabled?'🔔 Alarm armed · Disable':'🔕 Enable alarm'}</button><button type="button" onClick={onTestAlarm}>Test sound</button><small role="status">{alarmMessage}</small></div>
@@ -51,19 +129,40 @@ export default function SpotNetflowPanel({alarmEnabled=false,alarmMessage='',onE
     </div>
     {live.logError&&<p className="netflow-warning" role="status">{live.logError}</p>}
     <NetflowLogPanel revision={live.logRevision} />
-    <div className="netflow-depth-controls"><label>Order-book band <select value={depthBand} onChange={e=>setDepthBand(Number(e.target.value))}><option value={0.001}>±0.1% from midpoint</option><option value={0.005}>±0.5% from midpoint</option></select></label><span>Binance USDT depth · 10s snapshots · ≥ means partial coverage</span></div>
+    <div className="netflow-depth-controls"><label>Order-book band <select value={depthBand} onChange={e=>setDepthBand(Number(e.target.value))}><option value={0.001}>±0.1% from midpoint</option><option value={0.005}>±0.5% from midpoint</option></select></label><span>Binance Spot / Futures USDT depth · 10s snapshots · ≥ means partial coverage</span></div>
+    {futuresLive.error&&<p role="status" className="netflow-warning">{futuresLive.error}</p>}
     {depth.error&&<p role="status" className="netflow-warning">{depth.error}</p>}
-    <div className="netflow-scroll"><table><thead><tr><th>Symbol</th><th>Live price · USDT</th><th>1m alarm threshold</th><th>1 minute · live</th><th>Buy depth · bids<br/>within −{depthBand*100}%</th><th>Sell depth · asks<br/>within +{depthBand*100}%</th><th>Spread</th><th>Depth received · PKT</th>{DISPLAY_WINDOWS.slice(1).map(([k,l])=><th key={k}>{l}</th>)}<th>Market Cap</th></tr></thead>{COIN_GROUPS.map(group=><tbody key={group.id}><tr className="netflow-group-row"><th colSpan={DISPLAY_WINDOWS.length+8}>{group.name}</th></tr>{group.coins.map(symbol=>{
-      const row=rows.find(r=>r.symbol===symbol),threshold=thresholdFor(symbol),book=depth.rows.find(r=>r.symbol===symbol),band=book?.bands?.find(b=>b.band===depthBand);
-      const bookOld=!!depth.error||book?.stale||!book?.fetchedAt||tick-book.fetchedAt>25000;
-      const valueCell=(k,l)=>{const v=row.values[k],old=cellStale(row,k),large=k==='1m'&&Number.isFinite(v)&&Math.abs(v)>=threshold&&row.stream?.ready;
-        return <td key={k} className={`${old?'flow-stale':v>0?'flow-positive':v<0?'flow-negative':''} ${large&&!old?'flow-large':''}`} title={`${symbol} · ${l}: ${usd(v)} net taker flow`}><span>{usd(v)}</span>{k==='1m'&&!row.stream?.ready?<small>PARTIAL</small>:large?<small>THRESHOLD HIT</small>:null}</td>;
-      };
-      return <tr key={symbol}><th><span className={`coin-icon coin-${symbol}`}>{({BTC:'₿',ETH:'Ξ',BNB:'◆',USDC:'$',XRP:'✕',SOL:'◎'})[symbol]}</span>{symbol}</th><td className={!healthy||row.stream?.stale?'flow-stale':''}>{livePrice(row.stream?.price)}</td><td className="netflow-threshold">±{usd(threshold,false)}<small>{group.id==='fixed'?'Fixed':'Cap-based preset'}</small></td>{valueCell('1m','1 minute')}
-        <td className={bookOld?'flow-stale':''}>{band?`${band.bidComplete?'':'≥ '}${usd(band.bidUSDT,false)}`:'—'}<small>{bookOld?'STALE / UNAVAILABLE':band?.bidComplete?'FULL BAND':'PARTIAL BOOK'}</small></td><td className={bookOld?'flow-stale':''}>{band?`${band.askComplete?'':'≥ '}${usd(band.askUSDT,false)}`:'—'}<small>{bookOld?'STALE / UNAVAILABLE':band?.askComplete?'FULL BAND':'PARTIAL BOOK'}</small></td><td className={bookOld?'flow-stale':''}>{Number.isFinite(book?.spreadPct)?book.spreadPct.toFixed(4)+'%':'—'}</td><td className={`netflow-depth-time ${bookOld?'flow-stale':''}`}>{book?.fetchedAt?pktDateTime(book.fetchedAt):'Waiting for depth'}</td>{DISPLAY_WINDOWS.slice(1).map(([k,l])=>valueCell(k,l))}<td>{usd(row.marketCap,false)}</td></tr>;
-    })}</tbody>)}{dailyMovers.length>0&&<tbody><tr className="netflow-group-row"><th colSpan={DISPLAY_WINDOWS.length+8}>Daily top 5 gainers + 5 losers · liquid Binance USDT pairs · ±$2M / minute · updated {moversUpdated?pktDateTime(moversUpdated):'—'}</th></tr>{dailyMovers.map(mover=>{const stream=live.rows.find(r=>r.symbol===mover.symbol),threshold=2_000_000,net=stream?.net,old=!healthy||!stream?.lastTrade||tick-stream.lastTrade>15000,large=stream?.ready&&!old&&Number.isFinite(net)&&Math.abs(net)>=threshold;return <tr key={mover.symbol}><th><span className="coin-icon">{mover.side==='GAINER'?'↗':'↘'}</span>{mover.symbol}<small className={mover.side==='GAINER'?'flow-positive':'flow-negative'}>{mover.side} · {mover.changePct>0?'+':''}{mover.changePct.toFixed(2)}% / 24h</small></th><td className={old?'flow-stale':''}>{livePrice(stream?.price)}</td><td className="netflow-threshold">±$2.00M<small>Daily mover</small></td><td className={`${old?'flow-stale':net>0?'flow-positive':net<0?'flow-negative':''} ${large?'flow-large':''}`}><span>{usd(net)}</span><small>{!stream?.ready?`WARMUP ${stream?.remaining??60}s`:large?'THRESHOLD HIT':'ROLLING 60s'}</small></td><td>—<small>Flow-only row</small></td><td>—<small>Flow-only row</small></td><td>—</td><td className="netflow-depth-time">{stream?.lastTrade?pktDateTime(stream.lastTrade):'Waiting for first trade'}</td>{DISPLAY_WINDOWS.slice(1).map(([key])=><td key={key}>—</td>)}<td>—</td></tr>;})}</tbody>}</table></div>
-    <p className="netflow-note">Only the 1-minute column triggers alarms. The six core coins use fixed ±$5M thresholds; daily top gainers/losers use ±$2M. Daily movers are selected by 24-hour percentage change and at least $10M quote volume, not by market capitalization. Depth is pending visible orders at one exchange, while netflow is executed trades over 60 seconds. They are different snapshots in time; pending orders can change or cancel. A partial book is a lower bound, not confirmed thin liquidity. Alarms do not depend on depth availability.</p>
+    <div className="netflow-scroll"><table>
+      <thead><tr>
+        <th>Symbol</th><th>Latest price · USDT</th><th>1m alarm threshold</th><th>1 minute · live</th>
+        <th>Buy depth · bids<br/>within −{depthBand*100}%</th>
+        <th>Sell depth · asks<br/>within +{depthBand*100}%</th>
+        <th>Spread</th><th>Depth received · PKT</th>
+        {WINDOWS.map(([key,label])=><th key={key}>{label}</th>)}<th>Market Cap</th>
+      </tr></thead>
+      {COIN_GROUPS.map(group=><tbody key={group.id}>
+        <tr className="netflow-group-row"><th colSpan={TABLE_COLUMNS}>{group.name}</th></tr>
+        {group.coins.map(symbol=>renderSpotRow(symbol,CORE_BADGES[symbol],null,'Fixed'))}
+      </tbody>)}
+      <tbody>
+        <tr className="netflow-group-row"><th colSpan={TABLE_COLUMNS}>Gold · Silver · S&amp;P 500 · Binance Futures USDT perpetuals</th></tr>
+        {TRADFI_MARKETS.map(({symbol,name,badge})=>{
+          const stream=futuresLive.rows.find(row=>row.symbol===symbol);
+          return <NetflowRow key={symbol} symbol={symbol} name={name} badge={badge} subtitle={symbol+'USDT · perpetual'}
+            stream={stream} history={data?.futuresRows?.find(row=>row.symbol===symbol)}
+            book={depth.futuresRows?.find(row=>row.symbol===symbol)} depthBand={depthBand} depthError={depth.error} tick={tick}
+            liveStale={!!futuresLive.error||!stream?.asOf||stream.stale||tick-stream.asOf>25000}
+            thresholdLabel="No alarm configured" />;
+        })}
+      </tbody>
+      <tbody>
+        <tr className="netflow-group-row"><th colSpan={TABLE_COLUMNS}>Daily top 5 gainers + 5 losers · liquid Binance USDT pairs · ±$2M / minute · {moversUpdated?`updated ${pktDateTime(moversUpdated)}`:moversError?'List unavailable':'Loading daily movers…'}</th></tr>
+        {dailyMovers.map(mover=>renderSpotRow(mover.symbol,mover.side==='GAINER'?'↗':'↘',
+          `${mover.side} · ${mover.changePct>0?'+':''}${mover.changePct.toFixed(2)}% / 24h`,'Daily mover'))}
+      </tbody>
+    </table></div>
+    <p className="netflow-note">Core spot alarms use ±$5M and daily movers use ±$2M. Gold, Silver and S&amp;P 500 use Binance perpetual prices and flow. Order book depth shows pending orders within the selected band. Netflow shows executed trades. ≥ indicates partial order book coverage.</p>
     <div className="netflow-footer"><span>Green: net buying · Red: net selling · 1m highlight: coin threshold · —: unavailable</span><span>{data?.source || 'Historical windows'}: {stale?'stale / loading':'30s refresh'} · {data?.fetchedAt?pktDateTime(data.fetchedAt):'Waiting'}</span></div>
-    <p className="netflow-note">Live price and 1-minute flow use WebSocket trades, with a verified rolling-60-second REST fallback every 3 seconds if streaming is unavailable. REST loads the recent minute immediately; a fresh WebSocket needs 60 seconds of coverage. Events stay in this browser (latest 100); one event per observed crossing, with a 60-second cooldown per coin and direction. REST mode can detect crossings only at its refresh times. Tracking requires this page to stay open and active. Values are USDT ≈ USD, and represent taker buying minus selling, not wallet deposits. {data?.notice}</p>
+    <p className="netflow-note">Spot price and 1-minute flow use WebSocket trades, with a verified rolling-60-second REST fallback every 3 seconds if streaming is unavailable. REST loads the recent minute immediately; a fresh WebSocket needs 60 seconds of coverage. Events stay in this browser (latest 100); one event per observed crossing, with a 60-second cooldown per coin and direction. REST mode can detect crossings only at its refresh times. Tracking requires this page to stay open and active. Futures 1-minute flow refreshes through REST every 10 seconds. Values are USDT ≈ USD, and represent taker buying minus selling, not wallet deposits. {data?.notice}</p>
   </section>;
 }
