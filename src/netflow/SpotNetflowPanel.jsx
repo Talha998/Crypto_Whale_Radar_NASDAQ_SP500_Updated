@@ -5,10 +5,12 @@ import React, {useEffect,useRef,useState} from 'react';
 import {COINS,WINDOWS,usd} from './netflow.js';
 import useLiveMinuteFlow from './useLiveMinuteFlow.js';
 import {livePrice,pktDateTime} from './liveMinuteFlow.js';
+import useSpotCatalog from './useSpotCatalog.js';
 import {TRADFI_MARKETS} from './tradFiMarkets.js';
 import './netflow.css';
 const DISPLAY_WINDOWS=[['1m','1 minute · live',1],...WINDOWS];
 const TABLE_COLUMNS=DISPLAY_WINDOWS.length+8;
+const CORE_GROUP=COIN_GROUPS[0];
 const CORE_BADGES={BTC:'₿',ETH:'Ξ',BNB:'◆',USDC:'$',XRP:'✕',SOL:'◎'};
 
 function NetflowRow({symbol,name=symbol,badge,subtitle,stream,history,book,depthBand,depthError,tick,liveStale,threshold,thresholdLabel}) {
@@ -55,6 +57,7 @@ function NetflowRow({symbol,name=symbol,badge,subtitle,stream,history,book,depth
 
 export default function SpotNetflowPanel({alarmEnabled=false,alarmMessage='',onEnableAlarm,onDisableAlarm,onTestAlarm,onNetflowAlarm}) {
   const [data,setData]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[tick,setTick]=useState(Date.now());
+  const catalog=useSpotCatalog(CORE_GROUP.coins);
   const [selected,setSelected]=useState('1m');
   const [depthBand,setDepthBand]=useState(0.005),depth=useLiquidityDepth();
   const [latestAlarm,setLatestAlarm]=useState(null);
@@ -114,7 +117,7 @@ export default function SpotNetflowPanel({alarmEnabled=false,alarmMessage='',onE
       threshold={thresholdFor(symbol)} thresholdLabel={thresholdLabel} />;
   }
   return <section className="netflow-panel" aria-label="Cryptocurrency Spot Netflow Statistics">
-    <div className="netflow-heading"><div><span className="netflow-eyebrow">SPOT MONEY FLOW · 6 CORE + 10 DAILY MOVERS</span><h2>Cryptocurrency Spot Netflow Statistics</h2><p>Binance Spot · live USDT prices &amp; rolling 60-second flow <span className={`netflow-status ${healthy?'':'waiting'}`}>{healthy?`LIVE · ${live.transport}`:live.status.toUpperCase()}</span></p><p className="netflow-clock">{pktDateTime(tick)}</p></div><button onClick={refresh} disabled={busy}>{busy?'Updating history…':'Refresh history'}</button></div>
+    <div className="netflow-heading"><div><span className="netflow-eyebrow">SPOT MONEY FLOW · BINANCE USDT MARKETS</span><h2>Cryptocurrency Spot Netflow Statistics</h2><p>Binance Spot · live USDT prices &amp; rolling 60-second flow <span className={`netflow-status ${healthy?'':'waiting'}`}>{healthy?`LIVE · ${live.transport}`:live.status.toUpperCase()}</span></p><p className="netflow-clock">{pktDateTime(tick)}</p></div><button onClick={refresh} disabled={busy}>{busy?'Updating history…':'Refresh history'}</button></div>
     <div className="netflow-alarm-controls"><div><b>1-minute sound alarms · BUY &amp; SELL</b><small>BTC, USDC, ETH, BNB, SOL, XRP: ±$5.00M. Daily 5 gainers + 5 losers: ±$2.00M net flow in a rolling 60 seconds.</small></div><button type="button" className={alarmEnabled?'is-armed':''} onClick={alarmEnabled?onDisableAlarm:onEnableAlarm}>{alarmEnabled?'🔔 Alarm armed · Disable':'🔕 Enable alarm'}</button><button type="button" onClick={onTestAlarm}>Test sound</button><small role="status">{alarmMessage}</small></div>
     {latestAlarm&&<div role="alert" className={`netflow-alarm-banner ${latestAlarm.side==='SELL'?'negative':'positive'}`}><div><b>🔔 {latestAlarm.symbol} · 1-MINUTE {latestAlarm.side==='BUY'?'NET BUYING':'NET SELLING'} ALARM</b><strong>{usd(latestAlarm.net)}</strong><span>Price {livePrice(latestAlarm.price)} USDT · {pktDateTime(latestAlarm.time)}</span><small>{alarmEnabled?'Sound alarm armed':'Visual alarm · Enable alarm for sound'}</small></div><button type="button" onClick={()=>setLatestAlarm(null)}>Dismiss</button></div>}
     <div className="netflow-summary"><label>Flow highlights <select value={selected} onChange={e=>setSelected(e.target.value)}>{DISPLAY_WINDOWS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>{rows.map(row=>{
@@ -132,6 +135,18 @@ export default function SpotNetflowPanel({alarmEnabled=false,alarmMessage='',onE
     <div className="netflow-depth-controls"><label>Order-book band <select value={depthBand} onChange={e=>setDepthBand(Number(e.target.value))}><option value={0.001}>±0.1% from midpoint</option><option value={0.005}>±0.5% from midpoint</option></select></label><span>Binance Spot / Futures USDT depth · 10s snapshots · ≥ means partial coverage</span></div>
     {futuresLive.error&&<p role="status" className="netflow-warning">{futuresLive.error}</p>}
     {depth.error&&<p role="status" className="netflow-warning">{depth.error}</p>}
+    <div className="netflow-catalog-controls">
+      <label htmlFor="netflow-coin-search">Search Spot coins</label>
+      <input id="netflow-coin-search" type="search" value={catalog.query} placeholder="BTC, ADA, DOGEUSDT"
+        onChange={event=>catalog.changeQuery(event.target.value)} />
+      <nav aria-label="Spot coin pages">
+        <button type="button" disabled={catalog.page===1} onClick={()=>catalog.setPage(catalog.page-1)}>Previous</button>
+        <span aria-live="polite">Page {catalog.page} of {catalog.lastPage} · {catalog.matchCount} pairs</span>
+        <button type="button" disabled={catalog.page===catalog.lastPage} onClick={()=>catalog.setPage(catalog.page+1)}>Next</button>
+      </nav>
+    </div>
+    {catalog.catalogStale&&<p className="netflow-warning" role="status">The Binance coin list could not refresh. Showing available results and retrying.</p>}
+    {catalog.detailsError&&<p className="netflow-warning" role="status">Market data for this page could not refresh. Retrying automatically.</p>}
     <div className="netflow-scroll"><table>
       <thead><tr>
         <th>Symbol</th><th>Latest price · USDT</th><th>1m alarm threshold</th><th>1 minute · live</th>
@@ -140,10 +155,25 @@ export default function SpotNetflowPanel({alarmEnabled=false,alarmMessage='',onE
         <th>Spread</th><th>Depth received · PKT</th>
         {WINDOWS.map(([key,label])=><th key={key}>{label}</th>)}<th>Market Cap</th>
       </tr></thead>
-      {COIN_GROUPS.map(group=><tbody key={group.id}>
-        <tr className="netflow-group-row"><th colSpan={TABLE_COLUMNS}>{group.name}</th></tr>
-        {group.coins.map(symbol=>renderSpotRow(symbol,CORE_BADGES[symbol],null,'Fixed'))}
-      </tbody>)}
+      <tbody>
+        <tr className="netflow-group-row"><th colSpan={TABLE_COLUMNS}>
+          {!catalog.query.trim()&&catalog.page===1?CORE_GROUP.name:'Binance Spot · USDT pairs'}
+        </th></tr>
+        {catalog.visible.map(symbol=>{
+          if(CORE_GROUP.coins.includes(symbol))return renderSpotRow(symbol,CORE_BADGES[symbol],null,'Fixed');
+          const row=catalog.rows.find(entry=>entry.symbol===symbol);
+          const stream=row?.stream;
+          return <NetflowRow key={symbol} symbol={symbol} badge={symbol.slice(0,1)} subtitle={symbol+'USDT'}
+            history={row?.history} book={row?.book} stream={stream} depthBand={depthBand} tick={tick}
+            depthError={catalog.detailsError}
+            liveStale={catalog.detailsError||!stream?.asOf||stream.stale||tick-stream.asOf>25000}
+            thresholdLabel="No alarm configured" />;
+        })}
+        {catalog.detailsLoading&&<tr><td colSpan={TABLE_COLUMNS} role="status">Loading market data for this page…</td></tr>}
+        {!catalog.visible.length&&<tr><td colSpan={TABLE_COLUMNS} role="status">
+          {catalog.catalogLoading?'Loading Binance pairs…':catalog.catalogStale?'No matches in the available catalog.':'No Binance Spot USDT pairs match your search.'}
+        </td></tr>}
+      </tbody>
       <tbody>
         <tr className="netflow-group-row"><th colSpan={TABLE_COLUMNS}>Gold · Silver · S&amp;P 500 · Binance Futures USDT perpetuals</th></tr>
         {TRADFI_MARKETS.map(({symbol,name,badge})=>{
@@ -163,6 +193,6 @@ export default function SpotNetflowPanel({alarmEnabled=false,alarmMessage='',onE
     </table></div>
     <p className="netflow-note">Core spot alarms use ±$5M and daily movers use ±$2M. Gold, Silver and S&amp;P 500 use Binance perpetual prices and flow. Order book depth shows pending orders within the selected band. Netflow shows executed trades. ≥ indicates partial order book coverage.</p>
     <div className="netflow-footer"><span>Green: net buying · Red: net selling · 1m highlight: coin threshold · —: unavailable</span><span>{data?.source || 'Historical windows'}: {stale?'stale / loading':'30s refresh'} · {data?.fetchedAt?pktDateTime(data.fetchedAt):'Waiting'}</span></div>
-    <p className="netflow-note">Spot price and 1-minute flow use WebSocket trades, with a verified rolling-60-second REST fallback every 3 seconds if streaming is unavailable. REST loads the recent minute immediately; a fresh WebSocket needs 60 seconds of coverage. Events stay in this browser (latest 100); one event per observed crossing, with a 60-second cooldown per coin and direction. REST mode can detect crossings only at its refresh times. Tracking requires this page to stay open and active. Futures 1-minute flow refreshes through REST every 10 seconds. Values are USDT ≈ USD, and represent taker buying minus selling, not wallet deposits. {data?.notice}</p>
+    <p className="netflow-note">Spot price and 1-minute flow use WebSocket trades, with a verified rolling-60-second REST fallback every 3 seconds if streaming is unavailable. REST loads the recent minute immediately; a fresh WebSocket needs 60 seconds of coverage. Events stay in this browser (latest 100); one event per observed crossing, with a 60-second cooldown per coin and direction. REST mode can detect crossings only at its refresh times. Tracking requires this page to stay open and active. Additional Spot pairs and Futures refresh their 1-minute flow through REST every 10 seconds. Values are USDT ≈ USD, and represent taker buying minus selling, not wallet deposits. {data?.notice}</p>
   </section>;
 }

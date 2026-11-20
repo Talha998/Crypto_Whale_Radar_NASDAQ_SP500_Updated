@@ -18,7 +18,7 @@ export function createNetflowService({
     return response.json();
   }
   async function binance(symbol, interval, limit) {
-    const bars=await fetchBinanceMarket(market,`/klines?symbol=${symbol}USDT&interval=${interval}&limit=${limit}`,{fetcher,clock});
+    const bars=await fetchBinanceMarket(market,`/klines?symbol=${encodeURIComponent(symbol+'USDT')}&interval=${interval}&limit=${limit}`,{fetcher,clock});
     if(!Array.isArray(bars)||!bars.length)throw Error('Invalid market response');
     return bars;
   }

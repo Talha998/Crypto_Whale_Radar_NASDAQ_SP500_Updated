@@ -7,3 +7,9 @@
 
 .netflow-symbol-detail{display:inline-block;margin-left:8px;color:#b9c9dc;font-size:11px;font-weight:600}
 .coin-XAU,.coin-XAG,.coin-SPY{font-size:11px}
+
+.netflow-catalog-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0;color:#b9c9dc;font-size:13px}
+.netflow-catalog-controls nav{display:flex;align-items:center;gap:10px;margin-left:auto}
+.netflow-catalog-controls input,.netflow-catalog-controls button{color:#e7edf5;background:#172436;border:1px solid #35465d;border-radius:7px;padding:8px 12px}
+.netflow-catalog-controls input{width:min(100%,240px)}
+.netflow-catalog-controls button:disabled{opacity:.5;cursor:default}

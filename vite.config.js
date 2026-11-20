@@ -1,3 +1,4 @@
+import {spotCatalogPlugin} from './spot-catalog-server.mjs';
 import {liquidityDepthPlugin} from './liquidity-depth-server.mjs';
 import {dailyMoversPlugin} from './daily-movers-server.mjs';
 import {marketNewsPlugin} from './market-news-server.mjs';
@@ -9,5 +10,5 @@ import { marketApiPlugin } from './market-api.mjs';
 import { createIexFlowPlugin } from './alpaca-flow-server.mjs';
 
 export default defineConfig({
-  plugins: [liquidityDepthPlugin(), dailyMoversPlugin(), marketNewsPlugin(), liveRestPlugin(), spotNetflowPlugin(), react(), marketApiPlugin(), createIexFlowPlugin()],
+  plugins: [spotCatalogPlugin(), liquidityDepthPlugin(), dailyMoversPlugin(), marketNewsPlugin(), liveRestPlugin(), spotNetflowPlugin(), react(), marketApiPlugin(), createIexFlowPlugin()],
 });

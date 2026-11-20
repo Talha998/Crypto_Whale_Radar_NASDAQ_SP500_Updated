@@ -33,7 +33,7 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
   }
   async function oneCoin(symbol,end) {
     const start=end-60000;
-    let page=await get(`/aggTrades?symbol=${symbol}USDT&startTime=${start}&endTime=${end}&limit=${LIMIT}`);
+    let page=await get(`/aggTrades?symbol=${encodeURIComponent(symbol+'USDT')}&startTime=${start}&endTime=${end}&limit=${LIMIT}`);
     const trades=[];let complete=false,lastId=null;
     for(let count=0;count<MAX_PAGES;count++) {
       if(!Array.isArray(page))throw Error('Invalid trade response');
@@ -45,7 +45,7 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
       }
       if(page.length<LIMIT || Number(page.at(-1)?.T)>=end){complete=true;break;}
       if(count===MAX_PAGES-1)break;
-      page=await get(`/aggTrades?symbol=${symbol}USDT&fromId=${lastId+1}&limit=${LIMIT}`);
+      page=await get(`/aggTrades?symbol=${encodeURIComponent(symbol+'USDT')}&fromId=${lastId+1}&limit=${LIMIT}`);
     }
     if(!complete)throw Error('Trade history is too busy to verify a complete minute');
     let buy=0,sell=0;
@@ -56,7 +56,7 @@ export function createLiveRestService({fetcher=fetch,clock=Date.now,onEvent=asyn
     }
     let latest=trades.at(-1);
     if(!latest) {
-      const recent=await get(`/aggTrades?symbol=${symbol}USDT&limit=1`);
+      const recent=await get(`/aggTrades?symbol=${encodeURIComponent(symbol+'USDT')}&limit=1`);
       if(Array.isArray(recent)&&recent.length)latest=recent[0];
     }
     const price=latest?Number(latest.p):null,lastTrade=latest?Number(latest.T):null;

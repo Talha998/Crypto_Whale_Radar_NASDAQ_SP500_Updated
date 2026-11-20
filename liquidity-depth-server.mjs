@@ -14,7 +14,7 @@ export function createDepthService({fetcher=fetch,clock=Date.now,market=SPOT_MAR
     if(cached && cacheKey===key && clock()-lastAttempt<10000)return cached;
     lastAttempt=clock();
     pending=Promise.allSettled(requested.map(async symbol=>{
-      const book=await fetchBinanceMarket(market,`/depth?symbol=${symbol}USDT&limit=${limit}`,{fetcher,clock});
+      const book=await fetchBinanceMarket(market,`/depth?symbol=${encodeURIComponent(symbol+'USDT')}&limit=${limit}`,{fetcher,clock});
       return {symbol,...summarizeDepth(book,limit),fetchedAt:clock(),stale:false};
     })).then(results=>{
       const rows=results.map((result,index)=>{
